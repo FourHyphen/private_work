@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Device Status</title>
+    <style>
+      :root {
+        font-family: "Segoe UI", sans-serif;
+        color: #1f2933;
+        background: #f3f6fb;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(160deg, #eff6ff, #e0f2fe);
+      }
+
+      main {
+        width: min(560px, calc(100vw - 32px));
+        padding: 24px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+      }
+
+      h1 {
+        margin-top: 0;
+        margin-bottom: 12px;
+      }
+
+      .status-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #dbeafe;
+        color: #1d4ed8;
+        font-weight: 600;
+      }
+
+      pre {
+        margin: 0;
+        padding: 16px;
+        border-radius: 12px;
+        overflow: auto;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Device Status</h1>
+      <div class="status-row">
+        <span>Socket.IO</span>
+        <span id="connection" class="badge">connecting...</span>
+      </div>
+      <pre id="status">waiting for server data...</pre>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

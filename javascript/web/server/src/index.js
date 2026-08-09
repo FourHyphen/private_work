@@ -1,0 +1,56 @@
+const express = require('express');
+const http = require('http');
+const path = require('path');
+const { Server } = require('socket.io');
+const createDeviceSource = require('../../externalDevice/createDeviceSource');
+const { ExternalDeviceDataBuffer, ExternalDeviceDataPayload } = require('../../externalDevice/external_device_data');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+const PORT = 8082;
+const clients = new Set();        // ユーザー Web ブラウザ接続 socket.id 群を管理
+const deviceSource = createDeviceSource();
+const externalDeviceDataBuffer = new ExternalDeviceDataBuffer();
+const clientDir = path.join(__dirname, '../../client');
+
+app.use(express.static(clientDir));
+
+// ユーザー Web ブラウザとの接続、切断などのイベント定義
+io.on('connection', (socket) => {
+  clients.add(socket.id);
+  console.log(`Client connected: ${socket.id}`);
+
+  socket.emit('status', new ExternalDeviceDataPayload(externalDeviceDataBuffer.snapshot(), clients.size));
+
+  socket.on('disconnect', () => {
+    clients.delete(socket.id);
+    console.log(`Client disconnected: ${socket.id}`);
+  });
+});
+
+// 100 ms 毎に外部デバイスデータ取得、一定程度たまったらユーザー Web ブラウザに送信
+// サーバーとしてクライアント Web ブラウザを待ち受け開始
+server.listen(PORT, async () => {
+  await deviceSource.start(
+    (samples) => {
+      for (const s of samples) externalDeviceDataBuffer.push(s);
+      while (externalDeviceDataBuffer.isReady) {
+        io.emit('status', ExternalDeviceDataPayload.fromBuffer(externalDeviceDataBuffer, clients));
+      }
+    },
+    (err) => {
+      console.error(err);
+      io.emit('device-error', err.message);
+    }
+  );
+  console.log(`Server listening on http://localhost:${PORT}`);
+});
+
+// 割り込み終了時に取得経路（タイマ・socket・サブプロセス）を後始末する
+process.on('SIGINT', async () => {
+  await deviceSource.stop();
+  server.close();
+  process.exit(0);
+});

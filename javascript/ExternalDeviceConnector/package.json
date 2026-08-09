@@ -1,0 +1,19 @@
+{
+  "name": "external-device-connector",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "node example/mainProcess.js",
+    "device": "node externalDevice.js",
+    "connector": "node main.js",
+    "test": "vitest run test/unit"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

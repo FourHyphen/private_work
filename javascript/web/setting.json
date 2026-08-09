@@ -1,0 +1,13 @@
+{
+  "deviceSource": "driver",
+
+  "externalDeviceMode": "dummy",
+  "externalDeviceHost": "192.168.0.10",
+  "externalDevicePort": 9600,
+
+  "connector": {
+    "deviceUrl": "http://localhost:9001",
+    "mainPort": 9002,
+    "requestIntervalMs": 100
+  }
+}

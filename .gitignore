@@ -1,0 +1,20 @@
+node_modules/
+
+# テスト成果物
+test-results/
+playwright-report/
+blob-report/
+.vitest-cache/
+coverage/
+
+# 環境変数
+.env
+.env.*
+!.env.example
+
+# npm ログ
+npm-debug.log*
+
+# エディタ/OS
+.DS_Store
+Thumbs.db

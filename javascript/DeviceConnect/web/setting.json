@@ -9,6 +9,6 @@
 
   "connector": {
     "deviceUrl": "http://localhost:9001",
-    "mainPort": 9002
+    "externalDeviceConnectorServerPort": 9002
   }
 }

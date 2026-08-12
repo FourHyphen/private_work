@@ -68,7 +68,7 @@ flowchart TB
 | `externalDeviceUrl` | 例: `"http://192.168.0.10:9600"` | `real` モード時の外部デバイス接続先 URL |
 | `requestIntervalMs` | ミリ秒 | 外部デバイスデータを取得するポーリング間隔 |
 | `connector.deviceUrl` | URL | `connector` 経路のみ有効。ExternalDeviceConnector が接続する外部デバイス URL |
-| `connector.mainPort` | ポート番号 | ConnectorApp が Listen するポート |
+| `connector.externalDeviceConnectorServerPort` | 例: `9002` | ExternalDeviceConnector がサーバーとして Listen するポート |
 
 # メッセージ遷移
 ## ユーザー Web ブラウザ接続時と接続解除時

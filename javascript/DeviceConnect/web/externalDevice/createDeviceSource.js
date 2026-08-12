@@ -6,10 +6,15 @@ const setting = require('../setting.json');
 
 function createDeviceSource() {
   const source = process.env.DEVICE_SOURCE ?? setting.deviceSource ?? 'driver';
+  const connector = setting.connector ?? {};
 
   switch (source) {
     case 'connector':
-      return new ConnectorSource({ ...setting.connector, requestIntervalMs: setting.requestIntervalMs });
+      return new ConnectorSource({
+        deviceUrl: connector.deviceUrl,
+        externalDeviceConnectorServerPort: connector.externalDeviceConnectorServerPort,
+        requestIntervalMs: setting.requestIntervalMs,
+      });
     case 'driver':
       return new CurrentDriverSource(createExternalDeviceDriver(), { intervalMs: setting.requestIntervalMs });
     default:

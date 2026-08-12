@@ -7,7 +7,7 @@ const { MAIN_REQUEST, MAIN_DATA } = require('../../ExternalDeviceConnector/event
 class ConnectorSource {
   // 接続はコンストラクタではなく start() 内で行う（未使用時に副作用を出さない）
   constructor(config) {
-    this._config = config;           // { deviceUrl, mainPort, requestIntervalMs }
+    this._config = config;           // { deviceUrl, externalDeviceConnectorServerPort, requestIntervalMs }
     this._child = null;
     this._conn = null;
     this._requestTimer = null;
@@ -15,10 +15,15 @@ class ConnectorSource {
 
   async start(onSamples, onError = console.error) {
     const mainPath = path.join(__dirname, '../../ExternalDeviceConnector/main.js');
-    this._child = spawn('node', [mainPath, JSON.stringify(this._config)], { stdio: 'inherit' });
+    const connectorRuntimeConfig = {
+      deviceUrl: this._config.deviceUrl,
+      mainPort: this._config.externalDeviceConnectorServerPort,
+    };
+
+    this._child = spawn('node', [mainPath, JSON.stringify(connectorRuntimeConfig)], { stdio: 'inherit' });
     this._child.on('exit', (code) => onError(new Error(`connector exited: ${code}`)));
 
-    this._conn = clientIo(`http://localhost:${this._config.mainPort}`);
+    this._conn = clientIo(`http://localhost:${this._config.externalDeviceConnectorServerPort}`);
     this._conn.on('connect_error', onError);
 
     this._conn.on('connect', () => {

@@ -49,6 +49,9 @@ node example/externalDevice.js   # 別ターミナルで外部デバイス(ダ�
 node main.js (Get-Content .\example\local-config.json -Raw)
 ```
 
+## デバッグ: ダミー外部デバイスから都度データ取得する流れを実行
+一連の流れを `example/localDemo.js` に実装。package.json の `example` にこのファイルを実行するよう設定。
+
 ## 設定パラメータ一覧
 | キー | 型 | 必須 | 説明 |
 |---|---|---|---|

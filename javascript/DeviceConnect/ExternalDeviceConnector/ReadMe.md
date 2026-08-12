@@ -25,27 +25,28 @@
 - node.js
 
 # 実行手順
-```
-cd javascript/ExternalDeviceConnector
-npm install
-node externalDevice.js   # 別ターミナルで外部デバイス(ダミー)を起動
-npm start                # メインプロセス起動（example/mainProcess.js が main.js を起動）
-```
-
-## main.js の直接起動（デバッグ用）
 main.js は第1引数に JSON 文字列で設定を渡す。引数省略や不足はエラーになる。
 
-```bash
-# 設定を指定して起動
+## 設定を指定して起動
+```
+# PowerShell からの起動例
 node main.js '{"deviceUrl":"http://192.168.1.10:9001","mainPort":9002}'
 ```
 
 ## メインプロセスからサブプロセスとして起動する例
-```js
+```
 const { spawn } = require('child_process');
 
 const config = { deviceUrl: 'http://localhost:9001', mainPort: 9002 };
 const child = spawn('node', ['main.js', JSON.stringify(config)], { stdio: 'inherit' });
+```
+
+## デバッグ: 外部デバイスにダミーを使用してデバイスとの接続状態を作成
+```
+cd javascript/DeviceConnect/ExternalDeviceConnector
+npm install
+node example/externalDevice.js   # 別ターミナルで外部デバイス(ダミー)を起動
+node main.js (Get-Content .\example\local-config.json -Raw)
 ```
 
 ## 設定パラメータ一覧

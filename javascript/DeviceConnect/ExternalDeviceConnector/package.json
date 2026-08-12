@@ -4,9 +4,7 @@
   "private": true,
   "main": "main.js",
   "scripts": {
-    "start": "node example/mainProcess.js",
-    "device": "node externalDevice.js",
-    "connector": "node main.js",
+    "example": "node example/mainProcess.js",
     "test": "vitest run test/unit"
   },
   "dependencies": {

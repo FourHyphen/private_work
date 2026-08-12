@@ -62,7 +62,7 @@ flowchart TB
 
 | キー | 値 | 説明 |
 |------|----|------|
-| `deviceSource` | `"driver"` / `"connector"` | 取得経路スイッチ。`connector` の場合は ExternalDeviceConnector を使用する。環境変数 `DEVICE_SOURCE` で上書き可能（優先順位: 環境変数 > setting.json） |
+| `deviceSource` | `"driver"` / `"connector"` | 取得経路スイッチ。`connector` の場合は ExternalDeviceConnector を使用する |
 | `userWebClientListenPort` | 例: `8082` | ユーザー Web ブラウザからの接続を待ち受けるポート番号 |
 | `externalDeviceMode` | `"dummy"` / `"real"` | `driver` 経路のみ有効。疑似デバイス or 実機 |
 | `externalDeviceUrl` | 例: `"http://192.168.0.10:9600"` | `real` モード時の外部デバイス接続先 URL |

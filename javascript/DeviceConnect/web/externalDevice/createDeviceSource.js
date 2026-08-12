@@ -5,7 +5,7 @@ const ConnectorSource = require('./connectorSource');
 const setting = require('../setting.json');
 
 function createDeviceSource() {
-  const source = process.env.DEVICE_SOURCE ?? setting.deviceSource ?? 'driver';
+  const source = setting.deviceSource;
   const connector = setting.connector ?? {};
 
   switch (source) {

@@ -4,12 +4,13 @@ const path = require('path');
 const { Server } = require('socket.io');
 const createDeviceSource = require('../../externalDevice/createDeviceSource');
 const { ExternalDeviceDataBuffer, ExternalDeviceDataPayload } = require('../../externalDevice/external_device_data');
+const setting = require('../../setting.json');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-const PORT = 8082;
+const userWebClientListenPort = setting.userWebClientListenPort;
 const clients = new Set();        // ユーザー Web ブラウザ接続 socket.id 群を管理
 const deviceSource = createDeviceSource();
 const externalDeviceDataBuffer = new ExternalDeviceDataBuffer();
@@ -30,9 +31,9 @@ io.on('connection', (socket) => {
   });
 });
 
-// 100 ms 毎に外部デバイスデータ取得、一定程度たまったらユーザー Web ブラウザに送信
+// requestIntervalMs ごとに外部デバイスデータ取得、一定程度たまったらユーザー Web ブラウザに送信
 // サーバーとしてクライアント Web ブラウザを待ち受け開始
-server.listen(PORT, async () => {
+server.listen(userWebClientListenPort, async () => {
   await deviceSource.start(
     (samples) => {
       for (const s of samples) externalDeviceDataBuffer.push(s);
@@ -45,7 +46,7 @@ server.listen(PORT, async () => {
       io.emit('device-error', err.message);
     }
   );
-  console.log(`Server listening on http://localhost:${PORT}`);
+  console.log(`Server listening on http://localhost:${userWebClientListenPort}`);
 });
 
 // 割り込み終了時に取得経路（タイマ・socket・サブプロセス）を後始末する

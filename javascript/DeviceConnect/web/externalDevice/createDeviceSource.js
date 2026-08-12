@@ -9,9 +9,9 @@ function createDeviceSource() {
 
   switch (source) {
     case 'connector':
-      return new ConnectorSource(setting.connector);
+      return new ConnectorSource({ ...setting.connector, requestIntervalMs: setting.requestIntervalMs });
     case 'driver':
-      return new CurrentDriverSource(createExternalDeviceDriver());
+      return new CurrentDriverSource(createExternalDeviceDriver(), { intervalMs: setting.requestIntervalMs });
     default:
       throw new Error(`unknown deviceSource: ${source}`);
   }

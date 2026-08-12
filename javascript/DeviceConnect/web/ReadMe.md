@@ -62,12 +62,13 @@ flowchart TB
 
 | キー | 値 | 説明 |
 |------|----|------|
-| `deviceSource` | `"driver"` / `"connector"` | 取得経路スイッチ。環境変数 `DEVICE_SOURCE` で上書き可能（優先順位: 環境変数 > setting.json） |
+| `deviceSource` | `"driver"` / `"connector"` | 取得経路スイッチ。`connector` の場合は ExternalDeviceConnector を使用する。環境変数 `DEVICE_SOURCE` で上書き可能（優先順位: 環境変数 > setting.json） |
+| `userWebClientListenPort` | 例: `8082` | ユーザー Web ブラウザからの接続を待ち受けるポート番号 |
 | `externalDeviceMode` | `"dummy"` / `"real"` | `driver` 経路のみ有効。疑似デバイス or 実機 |
-| `externalDeviceHost` / `externalDevicePort` | — | `real` モード時の接続先 |
+| `externalDeviceUrl` | 例: `"http://192.168.0.10:9600"` | `real` モード時の外部デバイス接続先 URL |
+| `requestIntervalMs` | ミリ秒 | 外部デバイスデータを取得するポーリング間隔 |
 | `connector.deviceUrl` | URL | `connector` 経路のみ有効。ExternalDeviceConnector が接続する外部デバイス URL |
 | `connector.mainPort` | ポート番号 | ConnectorApp が Listen するポート |
-| `connector.requestIntervalMs` | ミリ秒 | Web サーバが Connector へ `MAIN_REQUEST` を送る間隔（＝取得頻度） |
 
 # メッセージ遷移
 ## ユーザー Web ブラウザ接続時と接続解除時

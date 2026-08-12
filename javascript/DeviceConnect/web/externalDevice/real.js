@@ -1,25 +1,25 @@
-const net = require('net');
+const { io } = require('socket.io-client');
 
 class RealExternalDeviceDriver {
-  constructor({ host, port }) {
-    this.host = host;
-    this.port = port;
+  constructor({ url }) {
+    this.url = url;
     this.socket = null;
   }
 
   connect() {
     return new Promise((resolve, reject) => {
-      this.socket = net.createConnection({ host: this.host, port: this.port });
+      this.socket = io(this.url, { autoConnect: false });
       this.socket.once('connect', resolve);
-      this.socket.once('error', reject);
+      this.socket.once('connect_error', reject);
+      this.socket.connect();
     });
   }
 
   async disconnect() {
-    this.socket?.destroy();
+    this.socket?.disconnect();
   }
 
-  // TODO: デバイス固有プロトコル（Modbus TCP / Omron FINS / Mitsubishi MC など）を実装
+  // TODO: 実装
   async readStatus() {
     throw new Error('readStatus not implemented: fill in device-specific protocol');
   }

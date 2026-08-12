@@ -7,8 +7,7 @@ const setting = require(path.join(__dirname, '../setting.json'));
 function createExternalDeviceDriver() {
   if (setting.externalDeviceMode === 'real') {
     return new RealExternalDeviceDriver({
-      host: setting.externalDeviceHost,
-      port: setting.externalDevicePort
+      url: setting.externalDeviceUrl
     });
   }
   return new DummyExternalDeviceDriver();

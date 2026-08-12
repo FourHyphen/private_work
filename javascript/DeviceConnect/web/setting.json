@@ -1,13 +1,14 @@
 {
   "deviceSource": "driver",
+  "userWebClientListenPort": 8082,
+
+  "requestIntervalMs": 100,
 
   "externalDeviceMode": "dummy",
-  "externalDeviceHost": "192.168.0.10",
-  "externalDevicePort": 9600,
+  "externalDeviceUrl": "http://192.168.0.10:9600",
 
   "connector": {
     "deviceUrl": "http://localhost:9001",
-    "mainPort": 9002,
-    "requestIntervalMs": 100
+    "mainPort": 9002
   }
 }

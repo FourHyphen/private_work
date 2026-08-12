@@ -4,7 +4,8 @@ const path = require('path');
 const { Server } = require('socket.io');
 const createDeviceSource = require('../../externalDevice/createDeviceSource');
 const { ExternalDeviceDataBuffer, ExternalDeviceDataPayload } = require('../../externalDevice/external_device_data');
-const setting = require('../../setting.json');
+const { loadSetting } = require('./loadSetting');
+const setting = loadSetting(process.argv);
 
 const app = express();
 const server = http.createServer(app);

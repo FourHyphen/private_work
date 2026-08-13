@@ -1,20 +1,29 @@
-const express = require('express');
-const http = require('http');
-const path = require('path');
-const { Server } = require('socket.io');
-const createDeviceSource = require('../../externalDevice/createDeviceSource');
-const { ExternalDeviceDataBuffer, ExternalDeviceDataPayload } = require('../../externalDevice/external_device_data');
-const { loadSetting } = require('./loadSetting');
-const setting = loadSetting(process.argv);
+// 引数チェック、NG なら処理終了
+const { validateArgs } = require('./validateArgs');
+if (!validateArgs(process.argv)) {
+  process.exit(1);
+}
 
+// 設定ファイル読み込み
+const { loadSetting } = require('./loadSetting');
+const setting = loadSetting(process.argv[2]);
+
+// 外部デバイスとの接続準備
+const createDeviceSource = require('../../externalDevice/createDeviceSource');
+const deviceSource = createDeviceSource();
+const { ExternalDeviceDataBuffer, ExternalDeviceDataPayload } = require('../../externalDevice/external_device_data');
+const externalDeviceDataBuffer = new ExternalDeviceDataBuffer();
+
+// Web サーバー準備
+const http = require('http');
+const express = require('express');
 const app = express();
 const server = http.createServer(app);
+const { Server } = require('socket.io');
 const io = new Server(server);
-
 const userWebClientListenPort = setting.userWebClientListenPort;
 const clients = new Set();        // ユーザー Web ブラウザ接続 socket.id 群を管理
-const deviceSource = createDeviceSource();
-const externalDeviceDataBuffer = new ExternalDeviceDataBuffer();
+const path = require('path');
 const clientDir = path.join(__dirname, '../../client');
 
 app.use(express.static(clientDir));

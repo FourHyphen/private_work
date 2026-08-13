@@ -1,7 +1,4 @@
-const path = require('path');
 const fs = require('fs');
-
-const DEFAULT_PATH = path.resolve(__dirname, '../../setting.json');
 
 function isValidPort(v) {
   return Number.isInteger(v) && v >= 1 && v <= 65535;
@@ -38,9 +35,7 @@ function validateSetting(s) {
     throw new Error('[setting] connector.externalDeviceConnectorServerPort は 1〜65535 の整数でなければなりません');
 }
 
-function loadSetting(argv) {
-  if (argv[2] == null) throw new Error('[loadSetting] 設定ファイルのパスを引数で指定してください');
-  const filePath = argv[2];
+function loadSetting(filePath) {
   let raw;
   try {
     raw = fs.readFileSync(filePath, 'utf-8');

@@ -6,13 +6,7 @@ const { loadSetting } = require('../../server/src/loadSetting');
 const EXAMPLE_SETTING_JSON_PATH = path.resolve(__dirname, '../../example/setting.json');
 
 describe('loadSetting', () => {
-  describe('argv[2] が未指定の場合', () => {
-    it('Error を送出する', () => {
-      expect(() => loadSetting(['node', 'index.js'])).toThrow(Error);
-    });
-  });
-
-  describe('argv[2] にファイルパスが指定された場合', () => {
+  describe('ファイルパスが指定された場合', () => {
     let tmpFile;
 
     beforeAll(() => {
@@ -33,7 +27,7 @@ describe('loadSetting', () => {
     });
 
     it('指定されたファイルを読み込んで返す', () => {
-      const setting = loadSetting(['node', 'index.js', tmpFile]);
+      const setting = loadSetting(tmpFile);
       expect(setting.deviceSource).toBe('connector');
       expect(setting.userWebClientListenPort).toBe(9090);
     });
@@ -41,7 +35,7 @@ describe('loadSetting', () => {
 
   describe('エラーケース', () => {
     it('指定したファイルが存在しない場合は Error を送出する', () => {
-      expect(() => loadSetting(['node', 'index.js', '/nonexistent/path/setting.json'])).toThrow(Error);
+      expect(() => loadSetting('/nonexistent/path/setting.json')).toThrow(Error);
     });
 
     it('指定したファイルが JSON でない場合は Error を送出する', () => {
@@ -49,7 +43,7 @@ describe('loadSetting', () => {
       try {
         tmpFile = path.join(os.tmpdir(), `setting-invalid-${Date.now()}.json`);
         fs.writeFileSync(tmpFile, 'not-json', 'utf-8');
-        expect(() => loadSetting(['node', 'index.js', tmpFile])).toThrow(Error);
+        expect(() => loadSetting(tmpFile)).toThrow(Error);
       } finally {
         if (tmpFile) fs.unlinkSync(tmpFile);
       }
@@ -149,6 +143,6 @@ describe('validateSetting — 必須パラメーター検証', () => {
 
 describe('例である setting.json がバリデーションを通過すること', () => {
   it('loadSetting がエラーなく設定を返す', () => {
-    expect(() => loadSetting(['node', 'index.js', EXAMPLE_SETTING_JSON_PATH])).not.toThrow();
+    expect(() => loadSetting(EXAMPLE_SETTING_JSON_PATH)).not.toThrow();
   });
 });

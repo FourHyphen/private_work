@@ -1,6 +1,7 @@
 const { io } = require('socket.io-client');
 
-class RealExternalDeviceDriver {
+// Driver 接続指定時に実在する外部デバイスに接続する
+class RealDriverSource {
   constructor({ url }) {
     this.url = url;
     this.socket = null;
@@ -25,4 +26,4 @@ class RealExternalDeviceDriver {
   }
 }
 
-module.exports = RealExternalDeviceDriver;
+module.exports = RealDriverSource;

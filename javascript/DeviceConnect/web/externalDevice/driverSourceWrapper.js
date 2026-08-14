@@ -1,5 +1,5 @@
 // 既存ドライバを Connector 経路のインタフェースと合わせるためのラッパークラス
-class DriverSource {
+class DriverSourceWrapper {
   constructor(driver, { intervalMs = 100 } = {}) {
     this._driver = driver;
     this._intervalMs = intervalMs;
@@ -25,4 +25,4 @@ class DriverSource {
   }
 }
 
-module.exports = DriverSource;
+module.exports = DriverSourceWrapper;

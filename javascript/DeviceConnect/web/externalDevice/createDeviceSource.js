@@ -1,5 +1,5 @@
-const createExternalDeviceDriver = require('./driverSource');
-const DriverSource = require('./driverSourceWrapper');
+const DriverSourceFactory = require('./driverSourceFactory');
+const DriverSourceWrapper = require('./driverSourceWrapper');
 const ConnectorSource = require('./connectorSource');
 
 // 設定オブジェクトの指示通りの経路を確立する
@@ -16,7 +16,7 @@ function createDeviceSource(setting) {
       });
     // 想定: このアプリから直接外部デバイスに接続
     case 'driver':
-      return new DriverSource(createExternalDeviceDriver(setting), { intervalMs: setting.requestIntervalMs });
+      return new DriverSourceWrapper(DriverSourceFactory(setting), { intervalMs: setting.requestIntervalMs });
     // 想定外の場合
     default:
       throw new Error(`unknown deviceSource: ${source}`);

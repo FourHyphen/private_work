@@ -1,4 +1,4 @@
-class DummyExternalDeviceDriver {
+class DummyDriverSource {
   async connect() {}
 
   async disconnect() {}
@@ -12,4 +12,4 @@ class DummyExternalDeviceDriver {
   }
 }
 
-module.exports = DummyExternalDeviceDriver;
+module.exports = DummyDriverSource;

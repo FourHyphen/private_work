@@ -39,14 +39,17 @@ function validateSetting(s) {
   if (!isValidUrl(s?.externalDeviceUrl))
     throw new Error('[setting] externalDeviceUrl は有効な URL でなければなりません');
 
-  if (!s?.connector || typeof s.connector !== 'object')
-    throw new Error('[setting] connector オブジェクトが必要です');
+  // ExternalDeviceConnector を使用する場合のパラメーター検証
+  if (s?.deviceSource === 'connector') {
+    if (!s?.connector || typeof s.connector !== 'object')
+      throw new Error('[setting] connector オブジェクトが必要です');
 
-  if (!isValidUrl(s.connector.deviceUrl))
-    throw new Error('[setting] connector.deviceUrl は有効な URL でなければなりません');
+    if (!isValidUrl(s.connector.deviceUrl))
+      throw new Error('[setting] connector.deviceUrl は有効な URL でなければなりません');
 
-  if (!isValidPort(s.connector.externalDeviceConnectorServerPort))
-    throw new Error('[setting] connector.externalDeviceConnectorServerPort は 1〜65535 の整数でなければなりません');
+    if (!isValidPort(s.connector.externalDeviceConnectorServerPort))
+      throw new Error('[setting] connector.externalDeviceConnectorServerPort は 1〜65535 の整数でなければなりません');
+  }
 }
 
 function isValidPort(v) {
@@ -54,8 +57,16 @@ function isValidPort(v) {
 }
 
 function isValidUrl(v) {
-  if (typeof v !== 'string') return false;
-  try { new URL(v); return true; } catch { return false; }
+  if (typeof v !== 'string')
+    return false;
+
+  // URL として解釈できれば OK とする
+  try {
+    new URL(v);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 module.exports = { loadSetting, validateSetting };

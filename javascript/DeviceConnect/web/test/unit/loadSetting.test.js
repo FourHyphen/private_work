@@ -116,16 +116,21 @@ describe('validateSetting — 必須パラメーター検証', () => {
   });
 
   describe('connector', () => {
-    it('connector が未定義の場合は Error を送出する', () => {
+    it('deviceSource が driver の場合は connector を省略してもエラーを送出しない', () => {
       const { connector: _, ...withoutConnector } = VALID;
-      expect(() => validateSetting(withoutConnector)).toThrow(Error);
+      expect(() => validateSetting(withoutConnector)).not.toThrow();
+    });
+
+    it('deviceSource が connector の場合は connector が未定義なら Error を送出する', () => {
+      const { connector: _, ...withoutConnector } = VALID;
+      expect(() => validateSetting({ ...withoutConnector, deviceSource: 'connector' })).toThrow(Error);
     });
 
     describe('connector.deviceUrl', () => {
       it.each([undefined, null, 123, 'not-a-url'])(
         '不正値 %s の場合は Error を送出する',
         (val) => {
-          expect(() => validateSetting({ ...VALID, connector: { ...VALID.connector, deviceUrl: val } })).toThrow(Error);
+          expect(() => validateSetting({ ...VALID, deviceSource: 'connector', connector: { ...VALID.connector, deviceUrl: val } })).toThrow(Error);
         }
       );
     });
@@ -134,7 +139,7 @@ describe('validateSetting — 必須パラメーター検証', () => {
       it.each([undefined, null, 0, -1, 65536, 3.5, '9002'])(
         '不正値 %s の場合は Error を送出する',
         (val) => {
-          expect(() => validateSetting({ ...VALID, connector: { ...VALID.connector, externalDeviceConnectorServerPort: val } })).toThrow(Error);
+          expect(() => validateSetting({ ...VALID, deviceSource: 'connector', connector: { ...VALID.connector, externalDeviceConnectorServerPort: val } })).toThrow(Error);
         }
       );
     });

@@ -34,7 +34,10 @@ io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
 
   // 接続してきたブラウザに現在の情報を送る
-  socket.emit('status', new ExternalDeviceDataPayload(externalDeviceDataBuffer.snapshot(), clients.size));
+  socket.emit(
+    'status',
+    ExternalDeviceDataPayload.createStatusForInitialSync(externalDeviceDataBuffer.snapshot(), clients.size)
+  );
 
   socket.on('disconnect', () => {
     clients.delete(socket.id);
@@ -48,9 +51,12 @@ server.listen(userWebClientListenPort, async () => {
   await deviceSource.start(
     // onSamples = 外部デバイスデータ取得成功時に実行する処理
     (samples) => {
+      // 外部デバイスデータをバッファに追加
       for (const s of samples) externalDeviceDataBuffer.push(s);
+
+      // バッファに一定数以上たまったら、ユーザー Web ブラウザに送信
       while (externalDeviceDataBuffer.isReady) {
-        io.emit('status', ExternalDeviceDataPayload.fromBuffer(externalDeviceDataBuffer, clients));
+        io.emit('status', ExternalDeviceDataPayload.createStatusForLiveUpdate(externalDeviceDataBuffer, clients));
       }
     },
     (err) => {

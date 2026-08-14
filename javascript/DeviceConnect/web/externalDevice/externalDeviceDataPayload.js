@@ -1,11 +1,13 @@
 class ExternalDeviceDataPayload {
-  constructor(samples, connectedClients) {
-    this.samples = samples;
-    this.connectedClients = connectedClients;
+  static createStatusForInitialSync(samples, connectedClients) {
+    return {
+      samples,
+      connectedClients,
+    };
   }
 
-  static fromBuffer(buffer, clients) {
-    return new ExternalDeviceDataPayload(buffer.flush(), clients.size);
+  static createStatusForLiveUpdate(buffer, clients) {
+    return this.createStatusForInitialSync(buffer.flush(), clients.size);
   }
 }
 

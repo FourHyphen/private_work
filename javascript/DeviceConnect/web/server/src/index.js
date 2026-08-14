@@ -8,9 +8,11 @@ if (!validateArgs(process.argv)) {
 const { loadSetting } = require('./loadSetting');
 const setting = loadSetting(process.argv[2]);
 
-// 外部デバイスとの接続準備
+// 外部デバイスと接続
 const createDeviceSource = require('../../externalDevice/createDeviceSource');
 const deviceSource = createDeviceSource(setting);
+
+// 外部デバイスからのデータの扱い準備
 const ExternalDeviceDataBuffer = require('../../externalDevice/externalDeviceDataBuffer');
 const ExternalDeviceDataPayload = require('../../externalDevice/externalDeviceDataPayload');
 const externalDeviceDataBuffer = new ExternalDeviceDataBuffer();
@@ -54,7 +56,7 @@ server.listen(userWebClientListenPort, async () => {
       // 外部デバイスデータをバッファに追加
       for (const s of samples) externalDeviceDataBuffer.push(s);
 
-      // バッファに一定数以上たまったら、ユーザー Web ブラウザに送信
+      // 送って問題なければ ユーザー Web ブラウザに送信
       while (externalDeviceDataBuffer.isReady) {
         io.emit('status', ExternalDeviceDataPayload.createStatusForLiveUpdate(externalDeviceDataBuffer, clients));
       }
@@ -64,12 +66,38 @@ server.listen(userWebClientListenPort, async () => {
       io.emit('device-error', err.message);
     }
   );
+
   console.log(`Server listening on http://localhost:${userWebClientListenPort}`);
 });
 
-// 割り込み終了時に取得経路（タイマ・socket・サブプロセス）を後始末する
-process.on('SIGINT', async () => {
-  await deviceSource.stop();
-  server.close();
+// 終了時処理が複数回走らないようにする
+let isShuttingDown = false;
+
+// 終了時処理
+async function shutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  console.log(`Received ${signal}, shutting down...`);
+
+  // 外部デバイスの取得経路を終了
+  try {
+    await deviceSource.stop();
+  } catch (err) {
+    console.error('Failed to stop device source:', err);
+  }
+
+  // ユーザー Web ブラウザとの接続経路およびサーバーを終了
+  try {
+    io.close();
+    server.close();
+  } catch (err) {
+    console.error('Failed to close server:', err);
+  }
+
   process.exit(0);
-});
+}
+
+// 終了時に取得経路を後始末する
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

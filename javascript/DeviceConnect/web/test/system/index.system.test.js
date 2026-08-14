@@ -11,16 +11,8 @@ describe('server/src/index.js system test', () => {
   it('設定ファイルを指定すると起動し、socket.io クライアントに status を返す', async () => {
     const cwd = path.resolve(__dirname, '../..');
 
-    // 引数とする json の中身文字列を作成
-    // 例として作成済みの json の設定を使いつつ、ポート番号を動的に設定
-    const baseSettingPath = path.join(cwd, 'example/setting.json');
-    const baseSetting = JSON.parse(fs.readFileSync(baseSettingPath, 'utf-8'));
-    const port = await reservePort();    // 今使われていない空きポート番号を取得
-    const setting = { ...baseSetting, userWebClientListenPort: port };
-
-    // 引数とする json を作成
-    const tmpSettingPath = path.join(os.tmpdir(), `web-system-setting-${Date.now()}-${Math.random()}.json`);
-    fs.writeFileSync(tmpSettingPath, JSON.stringify(setting), 'utf-8');
+    // 設定ファイルを作成
+    const { tmpSettingPath, port } = await createTempSettingFile(cwd);
 
     // 子プロセスとして起動
     const indexPath = path.join(cwd, SERVER_ENTRY_POINT_RELATIVE_PATH);
@@ -49,7 +41,7 @@ describe('server/src/index.js system test', () => {
       expect(status_payload).toHaveProperty('connectedClients');
       expect(status_payload.connectedClients).toBeGreaterThanOrEqual(1);
 
-      // 子プロセスを終了させる
+      // 子プロセスを SIGINT(ctrl + c) で終了させる
       child.kill('SIGINT');
       const { code, signal } = await waitForExit(child);
 
@@ -60,6 +52,49 @@ describe('server/src/index.js system test', () => {
         socket.disconnect();
       }
 
+      if (!child.killed) {
+        child.kill('SIGKILL');
+      }
+
+      if (fs.existsSync(tmpSettingPath)) {
+        fs.unlinkSync(tmpSettingPath);
+      }
+    }
+  }, 20000);
+
+  it('SIGTERM を受けても graceful shutdown で終了する', async () => {
+    const cwd = path.resolve(__dirname, '../..');
+
+    // 設定ファイル作成
+    const { tmpSettingPath, port } = await createTempSettingFile(cwd);
+
+    // 子プロセスとして起動
+    const indexPath = path.join(cwd, SERVER_ENTRY_POINT_RELATIVE_PATH);
+    const child = spawn(process.execPath, [indexPath, tmpSettingPath], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    try {
+      // サーバーが listen したら次に進む
+      await waitForChildOutput(child, `Server listening on http://localhost:${port}`);
+
+      // 子プロセスを SIGTERM で終了させる
+      child.kill('SIGTERM');
+
+      // 子プロセスが終了するまで待つ
+      const { code, signal } = await waitForExit(child);
+
+      // SIGTERM 終了の場合、
+      //   Windows -> 通常終了か SIGTERM 終了か不明のため、どちらでも OK とする
+      //   Windows 以外 -> SIGTERM 終了なら { code: 0, signal: null } となる
+      if (process.platform === 'win32') {
+        expect(code === 0 || signal === 'SIGTERM').toBe(true);
+      } else {
+        expect(code).toBe(0);
+        expect(signal).toBeNull();
+      }
+    } finally {
       if (!child.killed) {
         child.kill('SIGKILL');
       }
@@ -213,4 +248,18 @@ function waitForExit(child, timeoutMs = 10000) {
 
     child.once('exit', onExit);
   });
+}
+
+// テスト用の設定ファイルを作成
+// Returns: { tmpSettingPath: 一時ファイルパス, port: 割り当てられたポート番号 }
+async function createTempSettingFile(cwd) {
+  const baseSettingPath = path.join(cwd, 'example/setting.json');
+  const baseSetting = JSON.parse(fs.readFileSync(baseSettingPath, 'utf-8'));
+  const port = await reservePort();
+  const setting = { ...baseSetting, userWebClientListenPort: port };
+
+  const tmpSettingPath = path.join(os.tmpdir(), `web-system-setting-${Date.now()}-${Math.random()}.json`);
+  fs.writeFileSync(tmpSettingPath, JSON.stringify(setting), 'utf-8');
+
+  return { tmpSettingPath, port };
 }

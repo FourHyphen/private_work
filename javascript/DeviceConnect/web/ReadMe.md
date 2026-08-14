@@ -56,13 +56,14 @@ flowchart TB
 ```
 
 # 実行方法
+## エントリポイント
+`server/src/index.js`
+
 ## デバッグ実行
 package.json からデバッグ実行する
 
-引数に設定値を格納した json ファイルパス指定を必須とした。以下パラメーターを設定した json ファイルを引数指定すること。
-
-## 入力 json 設定項目
-実物例は `example/setting.json` を参照。
+## 引数 json 設定項目
+以下パラメーターを設定した json ファイルを引数指定すること。実物例は `example/setting.json` を参照。
 
 | キー | 値 | 説明 |
 |------|----|------|

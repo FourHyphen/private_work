@@ -11,7 +11,8 @@ const setting = loadSetting(process.argv[2]);
 // 外部デバイスとの接続準備
 const createDeviceSource = require('../../externalDevice/createDeviceSource');
 const deviceSource = createDeviceSource(setting);
-const { ExternalDeviceDataBuffer, ExternalDeviceDataPayload } = require('../../externalDevice/external_device_data');
+const ExternalDeviceDataBuffer = require('../../externalDevice/externalDeviceDataBuffer');
+const ExternalDeviceDataPayload = require('../../externalDevice/externalDeviceDataPayload');
 const externalDeviceDataBuffer = new ExternalDeviceDataBuffer();
 
 // Web サーバー準備

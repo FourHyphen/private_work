@@ -25,10 +25,10 @@ flowchart TB
     end
 
     subgraph DriverPath["現状経路 (deviceSource=driver)"]
-        CDS["driverSource.js<br/>ドライバ生成"]
+        CDS["driverSourceFactory.js<br/>ドライバ生成"]
         Wrapper["driverSourceWrapper.js<br/>Connector互換ラッパー"]
-        Dummy["dummy.js (疑似)"]
-        Real["real.js (実機)"]
+        Dummy["dummyDriverSource.js (疑似)"]
+        Real["realDriverSource.js (実機)"]
     end
 
     subgraph ConnectorPath["Connector 経路 (deviceSource=connector)"]
@@ -40,7 +40,7 @@ flowchart TB
         Device["外部デバイス本体"]
     end
 
-    Setting["setting.json<br/>deviceSource / connector 設定"]
+    Setting["引数指定の設定 json<br/>deviceSource / connector 設定"]
 
     Browser <-->|"Socket.IO (status)"| Server
     Server --> Factory

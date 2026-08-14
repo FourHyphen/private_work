@@ -2,7 +2,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const { io: clientIo } = require('socket.io-client');
-const { MAIN_REQUEST, MAIN_DATA } = require('../../ExternalDeviceConnector/events');
+const { MAIN_REQUEST, MAIN_DATA } = require('../../../ExternalDeviceConnector/events');
 
 class ConnectorSource {
   // 接続はコンストラクタではなく start() 内で行う（未使用時に副作用を出さない）
@@ -17,7 +17,7 @@ class ConnectorSource {
   // onError = ExternalDeviceDataSource との接続失敗時に実行する処理
   async start(onSamples, onError = console.error) {
     // ExternalDeviceConnector 実行準備
-    const edcPath = path.join(__dirname, '../../ExternalDeviceConnector/main.js');
+    const edcPath = path.join(__dirname, '../../../ExternalDeviceConnector/main.js');
     const connectorRuntimeConfig = {
       deviceUrl: this._config.deviceUrl,
       mainPort: this._config.externalDeviceConnectorServerPort,

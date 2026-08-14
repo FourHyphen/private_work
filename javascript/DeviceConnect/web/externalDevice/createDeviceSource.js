@@ -1,6 +1,6 @@
-const DriverSourceFactory = require('./driverSourceFactory');
+const DriverSourceFactory = require('./driver/driverSourceFactory');
 const DriverSourceWrapper = require('./driverSourceWrapper');
-const ConnectorSource = require('./connectorSource');
+const ConnectorSource = require('./connector/connectorSource');
 
 // 設定オブジェクトの指示通りの経路を確立する
 function createDeviceSource(setting) {

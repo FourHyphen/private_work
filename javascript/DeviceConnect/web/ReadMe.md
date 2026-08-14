@@ -25,8 +25,8 @@ flowchart TB
     end
 
     subgraph DriverPath["現状経路 (deviceSource=driver)"]
-        CDS["driverSource.js"]
-        Driver["externalDevice/index.js<br/>ドライバ生成"]
+        CDS["driverSource.js<br/>ドライバ生成"]
+        Wrapper["driverSourceWrapper.js<br/>Connector互換ラッパー"]
         Dummy["dummy.js (疑似)"]
         Real["real.js (実機)"]
     end
@@ -45,10 +45,10 @@ flowchart TB
     Browser <-->|"Socket.IO (status)"| Server
     Server --> Factory
     Factory -->|"driver"| CDS
+    CDS --> Wrapper
     Factory -->|"connector"| CS
-    CDS --> Driver
-    Driver --> Dummy
-    Driver --> Real
+    Wrapper --> Dummy
+    Wrapper --> Real
     Real -->|"通信"| Device
     CS -->|"spawn + Socket.IO"| Sub
     Sub -->|"通信"| Device
@@ -107,7 +107,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Server as Node.js/Expressサーバー
-    participant CDS as DriverSource
+    participant CDS as DriverSourceWrapper
     participant Device as 外部デバイス
     participant Browser as Webブラウザ
 

@@ -1,5 +1,5 @@
-const createExternalDeviceDriver = require('./index');
-const DriverSource = require('./driverSource');
+const createExternalDeviceDriver = require('./driverSource');
+const DriverSource = require('./driverSourceWrapper');
 const ConnectorSource = require('./connectorSource');
 
 // 設定オブジェクトの指示通りの経路を確立する

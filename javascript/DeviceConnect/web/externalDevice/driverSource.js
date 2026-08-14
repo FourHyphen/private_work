@@ -1,28 +1,14 @@
-// 既存ドライバを Connector 経路のインタフェースと合わせるためのラッパークラス
-class DriverSource {
-  constructor(driver, { intervalMs = 100 } = {}) {
-    this._driver = driver;
-    this._intervalMs = intervalMs;
-    this._timer = null;
-  }
+const path = require('path');
+const DummyExternalDeviceDriver = require('./dummy');
+const RealExternalDeviceDriver = require('./real');
 
-  async start(onSamples, onError = console.error) {
-    await this._driver.connect();
-    this._timer = setInterval(async () => {
-      try {
-        const sample = await this._driver.readStatus();
-        onSamples([sample]);    // 1 件でも配列で渡し、バッチ経路と口を揃える
-      } catch (err) {
-        onError(err);
-      }
-    }, this._intervalMs);
+function createExternalDeviceDriver(setting) {
+  if (setting.externalDeviceMode === 'real') {
+    return new RealExternalDeviceDriver({
+      url: setting.externalDeviceUrl
+    });
   }
-
-  async stop() {
-    clearInterval(this._timer);
-    this._timer = null;
-    await this._driver.disconnect();
-  }
+  return new DummyExternalDeviceDriver();
 }
 
-module.exports = DriverSource;
+module.exports = createExternalDeviceDriver;

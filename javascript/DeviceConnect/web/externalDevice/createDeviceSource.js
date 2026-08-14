@@ -1,22 +1,23 @@
-// 唯一の分岐点: setting.json / 環境変数で取得経路を切り替える
-const createExternalDeviceDriver = require('./index');       // 既存
+const createExternalDeviceDriver = require('./index');
 const CurrentDriverSource = require('./currentDriverSource');
 const ConnectorSource = require('./connectorSource');
-const setting = require('../setting.json');
 
-function createDeviceSource() {
+// 設定オブジェクトの指示通りの経路を確立する
+function createDeviceSource(setting) {
   const source = setting.deviceSource;
-  const connector = setting.connector ?? {};
 
   switch (source) {
+    // 想定: 外部デバイス接続に ExternalDeviceConnector 使用
     case 'connector':
       return new ConnectorSource({
-        deviceUrl: connector.deviceUrl,
-        externalDeviceConnectorServerPort: connector.externalDeviceConnectorServerPort,
+        deviceUrl: setting.connector.deviceUrl,
+        externalDeviceConnectorServerPort: setting.connector.externalDeviceConnectorServerPort,
         requestIntervalMs: setting.requestIntervalMs,
       });
+    // 想定: このアプリから直接外部デバイスに接続
     case 'driver':
-      return new CurrentDriverSource(createExternalDeviceDriver(), { intervalMs: setting.requestIntervalMs });
+      return new CurrentDriverSource(createExternalDeviceDriver(setting), { intervalMs: setting.requestIntervalMs });
+    // 想定外の場合
     default:
       throw new Error(`unknown deviceSource: ${source}`);
   }

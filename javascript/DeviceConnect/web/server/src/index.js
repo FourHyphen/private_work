@@ -10,7 +10,7 @@ const setting = loadSetting(process.argv[2]);
 
 // 外部デバイスとの接続準備
 const createDeviceSource = require('../../externalDevice/createDeviceSource');
-const deviceSource = createDeviceSource();
+const deviceSource = createDeviceSource(setting);
 const { ExternalDeviceDataBuffer, ExternalDeviceDataPayload } = require('../../externalDevice/external_device_data');
 const externalDeviceDataBuffer = new ExternalDeviceDataBuffer();
 
@@ -24,8 +24,7 @@ const io = new Server(server);
 const userWebClientListenPort = setting.userWebClientListenPort;
 const clients = new Set();        // ユーザー Web ブラウザ接続 socket.id 群を管理
 const path = require('path');
-const clientDir = path.join(__dirname, '../../client');
-
+const clientDir = path.join(__dirname, '../../client');    // Web ブラウザに渡す Web ページ設定管理フォルダ
 app.use(express.static(clientDir));
 
 // ユーザー Web ブラウザとの接続、切断などのイベント定義
@@ -33,6 +32,7 @@ io.on('connection', (socket) => {
   clients.add(socket.id);
   console.log(`Client connected: ${socket.id}`);
 
+  // 接続してきたブラウザに現在の情報を送る
   socket.emit('status', new ExternalDeviceDataPayload(externalDeviceDataBuffer.snapshot(), clients.size));
 
   socket.on('disconnect', () => {
@@ -45,6 +45,7 @@ io.on('connection', (socket) => {
 // サーバーとしてクライアント Web ブラウザを待ち受け開始
 server.listen(userWebClientListenPort, async () => {
   await deviceSource.start(
+    // onSamples = 外部デバイスデータ取得成功時に実行する処理
     (samples) => {
       for (const s of samples) externalDeviceDataBuffer.push(s);
       while (externalDeviceDataBuffer.isReady) {

@@ -1,12 +1,26 @@
 const fs = require('fs');
 
-function isValidPort(v) {
-  return Number.isInteger(v) && v >= 1 && v <= 65535;
-}
+function loadSetting(filePath) {
+  // ファイル読み込み
+  let raw;
+  try {
+    raw = fs.readFileSync(filePath, 'utf-8');
+  } catch {
+    throw new Error(`[loadSetting] ファイルを読み込めません: ${filePath}`);
+  }
 
-function isValidUrl(v) {
-  if (typeof v !== 'string') return false;
-  try { new URL(v); return true; } catch { return false; }
+  // json として解釈
+  let setting;
+  try {
+    setting = JSON.parse(raw);
+  } catch {
+    throw new Error(`[loadSetting] JSON の解析に失敗しました: ${filePath}`);
+  }
+
+  // 設定内容の妥当性検証
+  validateSetting(setting);
+
+  return setting;
 }
 
 function validateSetting(s) {
@@ -35,21 +49,13 @@ function validateSetting(s) {
     throw new Error('[setting] connector.externalDeviceConnectorServerPort は 1〜65535 の整数でなければなりません');
 }
 
-function loadSetting(filePath) {
-  let raw;
-  try {
-    raw = fs.readFileSync(filePath, 'utf-8');
-  } catch {
-    throw new Error(`[loadSetting] ファイルを読み込めません: ${filePath}`);
-  }
-  let setting;
-  try {
-    setting = JSON.parse(raw);
-  } catch {
-    throw new Error(`[loadSetting] JSON の解析に失敗しました: ${filePath}`);
-  }
-  validateSetting(setting);
-  return setting;
+function isValidPort(v) {
+  return Number.isInteger(v) && v >= 1 && v <= 65535;
+}
+
+function isValidUrl(v) {
+  if (typeof v !== 'string') return false;
+  try { new URL(v); return true; } catch { return false; }
 }
 
 module.exports = { loadSetting, validateSetting };

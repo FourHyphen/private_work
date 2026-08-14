@@ -25,7 +25,7 @@ flowchart TB
     end
 
     subgraph DriverPath["現状経路 (deviceSource=driver)"]
-        CDS["currentDriverSource.js"]
+        CDS["driverSource.js"]
         Driver["externalDevice/index.js<br/>ドライバ生成"]
         Dummy["dummy.js (疑似)"]
         Real["real.js (実機)"]
@@ -107,7 +107,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Server as Node.js/Expressサーバー
-    participant CDS as CurrentDriverSource
+    participant CDS as DriverSource
     participant Device as 外部デバイス
     participant Browser as Webブラウザ
 

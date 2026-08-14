@@ -1,5 +1,5 @@
-// 現状経路アダプタ: 既存ドライバの readStatus() ポーリングを DeviceSource ポートに閉じ込める
-class CurrentDriverSource {
+// 既存ドライバを Connector 経路のインタフェースと合わせるためのラッパークラス
+class DriverSource {
   constructor(driver, { intervalMs = 100 } = {}) {
     this._driver = driver;
     this._intervalMs = intervalMs;
@@ -11,7 +11,7 @@ class CurrentDriverSource {
     this._timer = setInterval(async () => {
       try {
         const sample = await this._driver.readStatus();
-        onSamples([sample]);          // 1 件でも配列で渡し、バッチ経路と口を揃える
+        onSamples([sample]);    // 1 件でも配列で渡し、バッチ経路と口を揃える
       } catch (err) {
         onError(err);
       }
@@ -25,4 +25,4 @@ class CurrentDriverSource {
   }
 }
 
-module.exports = CurrentDriverSource;
+module.exports = DriverSource;

@@ -2,7 +2,7 @@ const DriverSourceFactory = require('./driver/driverSourceFactory');
 const DriverSourceWrapper = require('./driverSourceWrapper');
 const ConnectorSource = require('./connector/connectorSource');
 
-// 設定オブジェクトの指示通りの経路を確立する
+// 設定オブジェクトの指示通りの接続経路を返す
 function createDeviceSource(setting) {
   const source = setting.deviceSource;
 

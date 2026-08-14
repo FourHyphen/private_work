@@ -14,7 +14,7 @@ class ConnectorSource {
   }
 
   // onSamples = 外部デバイスデータ取得成功時に実行する処理
-  // onError = ExternalDeviceDataSource との接続失敗時に実行する処理
+  // onError = ExternalDeviceConnector との接続失敗時に実行する処理
   async start(onSamples, onError = console.error) {
     // ExternalDeviceConnector 実行準備
     const edcPath = path.join(__dirname, '../../../ExternalDeviceConnector/main.js');

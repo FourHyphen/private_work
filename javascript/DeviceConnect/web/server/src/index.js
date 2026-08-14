@@ -8,7 +8,7 @@ if (!validateArgs(process.argv)) {
 const { loadSetting } = require('./loadSetting');
 const setting = loadSetting(process.argv[2]);
 
-// 外部デバイスと接続
+// 外部デバイスからのデータ受信接続準備
 const createDeviceSource = require('../../externalDevice/createDeviceSource');
 const deviceSource = createDeviceSource(setting);
 
@@ -27,7 +27,7 @@ const io = new Server(server);
 const userWebClientListenPort = setting.userWebClientListenPort;
 const clients = new Set();        // ユーザー Web ブラウザ接続 socket.id 群を管理
 const path = require('path');
-const clientDir = path.join(__dirname, '../../client');    // Web ブラウザに渡す Web ページ設定管理フォルダ
+const clientDir = path.join(__dirname, '../../client');    // Web ブラウザに渡す Web ページ関連ファイル格納フォルダ
 app.use(express.static(clientDir));
 
 // ユーザー Web ブラウザとの接続、切断などのイベント定義
@@ -41,6 +41,7 @@ io.on('connection', (socket) => {
     ExternalDeviceDataPayload.createStatusForInitialSync(externalDeviceDataBuffer.snapshot(), clients.size)
   );
 
+  // ユーザー Web ブラウザ側で切断したときの通知を受け取ったとき
   socket.on('disconnect', () => {
     clients.delete(socket.id);
     console.log(`Client disconnected: ${socket.id}`);
@@ -50,13 +51,14 @@ io.on('connection', (socket) => {
 // requestIntervalMs ごとに外部デバイスデータ取得、一定程度たまったらユーザー Web ブラウザに送信
 // サーバーとしてクライアント Web ブラウザを待ち受け開始
 server.listen(userWebClientListenPort, async () => {
+  // 外部デバイスからのデータ取得経路を開始
   await deviceSource.start(
     // onSamples = 外部デバイスデータ取得成功時に実行する処理
     (samples) => {
       // 外部デバイスデータをバッファに追加
       for (const s of samples) externalDeviceDataBuffer.push(s);
 
-      // 送って問題なければ ユーザー Web ブラウザに送信
+      // 送る条件を満たしていれば ユーザー Web ブラウザに送信
       while (externalDeviceDataBuffer.isReady) {
         io.emit('status', ExternalDeviceDataPayload.createStatusForLiveUpdate(externalDeviceDataBuffer, clients));
       }

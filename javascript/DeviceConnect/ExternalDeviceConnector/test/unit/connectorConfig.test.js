@@ -2,7 +2,8 @@ const { ConnectorConfig } = require('../../connectorConfig');
 
 const VALID = {
   deviceUrl: 'http://localhost:3001',
-  mainPort: 4000
+  mainPort: 4000,
+  pollIntervalMs: 500
 };
 
 describe('ConnectorConfig コンストラクタ', () => {
@@ -10,6 +11,7 @@ describe('ConnectorConfig コンストラクタ', () => {
     const config = new ConnectorConfig(VALID);
     expect(config.deviceUrl).toBe('http://localhost:3001');
     expect(config.mainPort).toBe(4000);
+    expect(config.pollIntervalMs).toBe(500);
     expect(Object.isFrozen(config)).toBe(true);
   });
 
@@ -23,6 +25,23 @@ describe('ConnectorConfig コンストラクタ', () => {
     expect(() => new ConnectorConfig({ ...VALID, mainPort: -1 })).toThrow(TypeError);
     expect(() => new ConnectorConfig({ ...VALID, mainPort: 3.5 })).toThrow(TypeError);
     expect(() => new ConnectorConfig({ ...VALID, mainPort: '4000' })).toThrow(TypeError);
+  });
+
+  it('pollIntervalMs を省略した場合は TypeError を送出する', () => {
+    const { pollIntervalMs, ...withoutPoll } = VALID;
+    expect(() => new ConnectorConfig(withoutPoll)).toThrow(TypeError);
+  });
+
+  it('pollIntervalMs が正の整数でなければ TypeError を送出する', () => {
+    expect(() => new ConnectorConfig({ ...VALID, pollIntervalMs: 0 })).toThrow(TypeError);
+    expect(() => new ConnectorConfig({ ...VALID, pollIntervalMs: -1 })).toThrow(TypeError);
+    expect(() => new ConnectorConfig({ ...VALID, pollIntervalMs: 3.5 })).toThrow(TypeError);
+    expect(() => new ConnectorConfig({ ...VALID, pollIntervalMs: '1000' })).toThrow(TypeError);
+  });
+
+  it('有効な pollIntervalMs を渡した場合はその値を保持する', () => {
+    const config = new ConnectorConfig({ ...VALID, pollIntervalMs: 500 });
+    expect(config.pollIntervalMs).toBe(500);
   });
 
 });

@@ -1,6 +1,6 @@
 // 入力データを検証し、使用可能な形で格納する
 class ConnectorConfig {
-  constructor({ deviceUrl, mainPort }) {
+  constructor({ deviceUrl, mainPort, pollIntervalMs }) {
     if (typeof deviceUrl !== 'string') {
       throw new TypeError('[connector] invalid config: deviceUrl must be a string');
     }
@@ -9,8 +9,13 @@ class ConnectorConfig {
       throw new TypeError('[connector] invalid config: mainPort must be a positive integer');
     }
 
+    if (!Number.isInteger(pollIntervalMs) || pollIntervalMs <= 0) {
+      throw new TypeError('[connector] invalid config: pollIntervalMs must be a positive integer');
+    }
+
     this._deviceUrl = deviceUrl;
     this._mainPort = mainPort;
+    this._pollIntervalMs = pollIntervalMs;
 
     Object.freeze(this);
   }
@@ -42,6 +47,10 @@ class ConnectorConfig {
 
   get mainPort() {
     return this._mainPort;
+  }
+
+  get pollIntervalMs() {
+    return this._pollIntervalMs;
   }
 }
 

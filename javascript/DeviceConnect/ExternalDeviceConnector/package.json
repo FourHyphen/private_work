@@ -4,7 +4,7 @@
   "private": true,
   "main": "main.js",
   "scripts": {
-    "example": "node example/mainProcess.js",
+    "example": "node example/localDemo.js",
     "test": "vitest run test/unit"
   },
   "dependencies": {

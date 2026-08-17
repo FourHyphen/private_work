@@ -1,6 +1,6 @@
 // ExternalDeviceConnector 本体（メインプロセスからサブプロセスとして起動される）
-// - 外部デバイスへ socket.io-client で接続し、メインプロセスからの要求都度データを取得して返す
-// - データは蓄積せず、要求 1 件につき最新の 1 件を返すパススルー構造
+// - 外部デバイスへ socket.io-client で接続し、pollIntervalMs 間隔でポーリングして最新データをバッファに保持する
+// - メインプロセスからの要求にはバッファの値を即時返却する（外部デバイスへの再要求は行わない）
 const { ConnectorConfig } = require('./connectorConfig');
 const { ConnectorApp } = require('./connectorApp');
 

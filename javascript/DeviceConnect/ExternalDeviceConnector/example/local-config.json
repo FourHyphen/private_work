@@ -1,4 +1,5 @@
 {
   "deviceUrl": "http://localhost:9001",
-  "mainPort": 9002
+  "mainPort": 9002,
+  "pollIntervalMs": 3000
 }

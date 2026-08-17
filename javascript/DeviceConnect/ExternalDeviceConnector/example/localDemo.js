@@ -2,9 +2,9 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const { io: clientIo } = require('socket.io-client');
-const { MAIN_REQUEST, MAIN_DATA } = require('../events');
+const { MAIN_REQUEST, MAIN_DATA, MAIN_NO_DATA } = require('../events');
 
-const connectorConfig = { deviceUrl: 'http://localhost:9001', mainPort: 9002 };
+const connectorConfig = { deviceUrl: 'http://localhost:9001', mainPort: 9002, pollIntervalMs: 3000 };
 const CONNECTOR_URL = `http://localhost:${connectorConfig.mainPort}`;
 
 // 外部デバイス(ダミー)をサブプロセスとして起動
@@ -25,8 +25,13 @@ connector.on('connect', () => {
 });
 
 // Connector からのデータ受信時
-connector.on(MAIN_DATA, (data) => {
-  console.log(`[main] received: ${JSON.stringify(data)}`);
+connector.on(MAIN_DATA, ({ data, updatedAt }) => {
+  console.log(`[main] received: ${JSON.stringify(data)} (updatedAt: ${updatedAt})`);
+});
+
+// バッファが空（外部デバイス未受信）のとき
+connector.on(MAIN_NO_DATA, () => {
+  console.log('[main] no data buffered yet');
 });
 
 // 終了時にサブプロセスも停止

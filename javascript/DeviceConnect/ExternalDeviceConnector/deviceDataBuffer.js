@@ -1,26 +1,33 @@
-// 外部デバイスから受信した最新データを保持する
+const MAX_BUFFER_SIZE = 288_000;    // 最大件数: ポーリング間隔 100ms で 8時間分のデータ蓄積を想定
+
 class DeviceDataBuffer {
   constructor() {
-    this._data = null;
-    this._updatedAt = null;
+    this._queue = [];
   }
 
+  // キューが最大件数を超える場合は最古のデータを削除（FIFO）してからキューに追加
   update(data) {
-    this._data = data;
-    this._updatedAt = new Date();
+    if (this._queue.length >= MAX_BUFFER_SIZE) {
+      this._queue.shift();
+    }
+
+    this._queue.push({ data, updatedAt: new Date() });
   }
 
-  // 未受信時は null、受信済みなら { data, updatedAt(Date) } を返す
+  // キューが空なら null を返す、1件以上なら全件返してキューを空にする（drain）
   get() {
-    if (this._updatedAt === null) {
+    if (this._queue.length === 0) {
       return null;
     }
-    return { data: this._data, updatedAt: this._updatedAt };
+
+    const items = this._queue;
+    this._queue = [];
+    return items;
   }
 
   get hasData() {
-    return this._updatedAt !== null;
+    return this._queue.length > 0;
   }
 }
 
-module.exports = { DeviceDataBuffer };
+module.exports = { DeviceDataBuffer, MAX_BUFFER_SIZE };

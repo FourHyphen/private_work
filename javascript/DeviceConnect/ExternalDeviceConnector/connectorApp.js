@@ -18,10 +18,8 @@ class ConnectorApp {
     this._createServer = createServer;
     this.externalDeviceConnection = null;
     this.server = null;
-    // 外部デバイスの最新データを保持するバッファ
-    this._buffer = new DeviceDataBuffer();
-    // 外部デバイスへのポーリング
-    this._poller = new DevicePoller(config.pollIntervalMs);
+    this._buffer = new DeviceDataBuffer();    // 外部デバイスから受信したデータを蓄積するキュー
+    this._poller = new DevicePoller(config.pollIntervalMs);    // 外部デバイスへのポーリング
   }
 
   start() {
@@ -54,15 +52,18 @@ class ConnectorApp {
 
       // メインプロセスからの要求にはバッファの値を即時返却する
       socket.on(MAIN_REQUEST, () => {
-        const buffered = this._buffer.get();
-        if (buffered === null) {
+        // TODO: get() にてキューの全件を返してキューを空にする際、送信失敗時もキューが空になる
+        // 送信成功時のみキューを空にするよう変更する
+        const items = this._buffer.get();
+        if (items === null) {
           socket.emit(MAIN_NO_DATA);
           return;
         }
-        socket.emit(MAIN_DATA, {
-          data: buffered.data,
-          updatedAt: buffered.updatedAt.toISOString()
-        });
+
+        socket.emit(MAIN_DATA, items.map(item => ({
+          data: item.data,
+          updatedAt: item.updatedAt.toISOString()
+        })));
       });
     });
 

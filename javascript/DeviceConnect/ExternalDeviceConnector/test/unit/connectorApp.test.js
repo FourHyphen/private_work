@@ -75,7 +75,7 @@ describe('ConnectorApp.start()', () => {
 
     expect(mockClientSocket.emit).toHaveBeenCalledWith(
       MAIN_DATA,
-      expect.objectContaining({ data: { value: 42 } })
+      expect.arrayContaining([expect.objectContaining({ data: { value: 42 } })])
     );
   });
 
@@ -91,10 +91,12 @@ describe('ConnectorApp.start()', () => {
     const call = mockClientSocket.emit.mock.calls.find(([name]) => name === MAIN_DATA);
     expect(call).toBeDefined();
     const payload = call[1];
-    expect(payload.data).toEqual({ value: 42 });
+    expect(Array.isArray(payload)).toBe(true);
+    expect(payload).toHaveLength(1);
+    expect(payload[0].data).toEqual({ value: 42 });
     // updatedAt は ISO8601 文字列であること
-    expect(typeof payload.updatedAt).toBe('string');
-    expect(new Date(payload.updatedAt).toISOString()).toBe(payload.updatedAt);
+    expect(typeof payload[0].updatedAt).toBe('string');
+    expect(new Date(payload[0].updatedAt).toISOString()).toBe(payload[0].updatedAt);
   });
 
   it('MAIN_REQUEST 受信時にバッファが空なら MAIN_NO_DATA を返す', () => {
@@ -107,8 +109,8 @@ describe('ConnectorApp.start()', () => {
     expect(mockClientSocket.emit).not.toHaveBeenCalledWith(MAIN_DATA, expect.anything());
   });
 
-  it('最新の DEVICE_DATA でバッファを上書きする', () => {
-    // DEVICE_DATA を複数回受信したら最後の値がバッファに残る
+  it('複数回 DEVICE_DATA を受信すると全件が蓄積されて返す', () => {
+    // DEVICE_DATA を複数回受信したら全件が配列で返る
     const onData = getCallback(mockExternalDeviceConnection.on, DEVICE_DATA);
     onData({ value: 1 });
     onData({ value: 2 });
@@ -117,10 +119,25 @@ describe('ConnectorApp.start()', () => {
     getCallback(mockMainServer.on, 'connection')(mockClientSocket);
     getCallback(mockClientSocket.on, MAIN_REQUEST)();
 
-    expect(mockClientSocket.emit).toHaveBeenCalledWith(
-      MAIN_DATA,
-      expect.objectContaining({ data: { value: 2 } })
-    );
+    const call = mockClientSocket.emit.mock.calls.find(([name]) => name === MAIN_DATA);
+    expect(call[1]).toHaveLength(2);
+    expect(call[1][0].data).toEqual({ value: 1 });
+    expect(call[1][1].data).toEqual({ value: 2 });
+  });
+
+  it('MAIN_REQUEST 返却後はキューが空になる（drain）', () => {
+    const onData = getCallback(mockExternalDeviceConnection.on, DEVICE_DATA);
+    onData({ value: 1 });
+
+    const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
+    getCallback(mockMainServer.on, 'connection')(mockClientSocket);
+
+    getCallback(mockClientSocket.on, MAIN_REQUEST)();
+    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA, expect.any(Array));
+
+    mockClientSocket.emit.mockClear();
+    getCallback(mockClientSocket.on, MAIN_REQUEST)();
+    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_NO_DATA);
   });
 
   it('disconnect 時にポーリングを停止し DEVICE_REQUEST を送信しなくなる', () => {

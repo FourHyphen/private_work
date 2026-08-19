@@ -52,14 +52,14 @@ class ConnectorApp {
 
       // メインプロセスからの要求にはバッファの値を即時返却する
       socket.on(MAIN_REQUEST, () => {
-        // TODO: get() にてキューの全件を返してキューを空にする際、送信失敗時もキューが空になる
-        // 送信成功時のみキューを空にするよう変更する
-        const items = this._buffer.get();
-        if (items === null) {
+        if (!this._buffer.hasData) {
           socket.emit(MAIN_NO_DATA);
           return;
         }
 
+        // TODO: get() はキューの全件を返してキューを空にする処理。送信失敗時もキューが空になる
+        // 送信成功時のみキューを空にするよう変更する
+        const items = this._buffer.get();
         socket.emit(MAIN_DATA, items.map(item => ({
           data: item.data,
           updatedAt: item.updatedAt.toISOString()

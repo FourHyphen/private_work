@@ -13,12 +13,11 @@ describe('DeviceDataBuffer', () => {
     expect(buffer.latest()).not.toBeNull();
   });
 
-  it('update(data) 後に latest() が { data, updatedAt } を返し updatedAt は Date', () => {
+  it('update(data) でキューに入れるデータは { data, updatedAt(Date 型) } である', () => {
     const buffer = new DeviceDataBuffer();
     buffer.update({ value: 42 });
 
     const result = buffer.latest();
-    expect(result).not.toBeNull();
     expect(result.data).toEqual({ value: 42 });
     expect(result.updatedAt).toBeInstanceOf(Date);
   });
@@ -35,11 +34,19 @@ describe('DeviceDataBuffer', () => {
 
   it('MAX_BUFFER_SIZE 超過時に最古を削除して最新を追加する（FIFO）', () => {
     const buffer = new DeviceDataBuffer();
+
+    // バッファを満杯にする
     for (let i = 0; i < MAX_BUFFER_SIZE; i++) {
       buffer.update({ value: i });
     }
+
+    // 超過分
     buffer.update({ value: MAX_BUFFER_SIZE });
 
+    // バッファ件数が MAX_BUFFER_SIZE を超過していないことを確認
+    expect(buffer._queue.length).toBe(MAX_BUFFER_SIZE);
+
+    // 最新のデータ期待値は FIFO なので MAX_BUFFER_SIZE
     const result = buffer.latest();
     expect(result.data).toEqual({ value: MAX_BUFFER_SIZE });
   });

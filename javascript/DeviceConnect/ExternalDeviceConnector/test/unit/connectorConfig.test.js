@@ -77,7 +77,7 @@ describe('ConnectorConfig.fromArgv', () => {
     );
   });
 
-  it('入力が不正なら Error を送出する', () => {
+  it('argv が配列でない場合（null 等）は Error を送出する', () => {
     // argv が配列であることを正とする
     expect(() => ConnectorConfig.fromArgv(null)).toThrow(
       '[connector] config JSON argument is required'

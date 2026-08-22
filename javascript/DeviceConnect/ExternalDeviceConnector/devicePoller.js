@@ -6,9 +6,10 @@ class DevicePoller {
   }
 
   // ポーリング開始。多重起動を避けるため既存タイマーをクリアしてから開始する
-  start(emitFn) {
+  // 引数: 定期的に実行させる関数など
+  start(func) {
     this.stop();
-    this._timer = setInterval(emitFn, this._intervalMs);
+    this._timer = setInterval(func, this._intervalMs);
   }
 
   stop() {

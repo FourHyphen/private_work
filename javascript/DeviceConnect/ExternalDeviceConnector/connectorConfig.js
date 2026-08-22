@@ -1,6 +1,6 @@
 // 入力データを検証し、使用可能な形で格納する
 class ConnectorConfig {
-  constructor({ deviceUrl, mainPort, pollIntervalMs }) {
+  constructor({ deviceUrl, mainPort, pollIntervalMs, dataFilePath }) {
     if (typeof deviceUrl !== 'string') {
       throw new TypeError('[connector] invalid config: deviceUrl must be a string');
     }
@@ -13,9 +13,17 @@ class ConnectorConfig {
       throw new TypeError('[connector] invalid config: pollIntervalMs must be a positive integer');
     }
 
+    // dataFilePath は省略可能
+    if (dataFilePath !== undefined && dataFilePath !== null) {
+      if (typeof dataFilePath !== 'string' || dataFilePath === '') {
+        throw new TypeError('[connector] invalid config: dataFilePath must be a non-empty string');
+      }
+    }
+
     this._deviceUrl = deviceUrl;
     this._mainPort = mainPort;
     this._pollIntervalMs = pollIntervalMs;
+    this._dataFilePath = (dataFilePath != null) ? dataFilePath : null;
 
     Object.freeze(this);
   }
@@ -51,6 +59,10 @@ class ConnectorConfig {
 
   get pollIntervalMs() {
     return this._pollIntervalMs;
+  }
+
+  get dataFilePath() {
+    return this._dataFilePath;
   }
 }
 

@@ -8,11 +8,19 @@ const {
   MAIN_NO_DATA
 } = require('./events');
 const { DeviceDataBuffer } = require('./deviceDataBuffer');
+const { DeviceDataWriter } = require('./deviceDataWriter');
 const { DevicePoller } = require('./devicePoller');
 
 class ConnectorApp {
-  // externalDeviceClient / createServer はテスト時にフェイクファクトリを注入できる
-  constructor(config, { createExternalDeviceClient = clientIo, createServer = (port) => new Server(port) } = {}) {
+  // externalDeviceClient / createServer / createDataWriter はテスト時にフェイクファクトリを注入できる
+  constructor(
+    config,
+    {
+      createExternalDeviceClient = clientIo,
+      createServer = (port) => new Server(port),
+      createDataWriter = (filePath) => new DeviceDataWriter(filePath)
+    } = {}
+  ) {
     this.config = config;
     this._createExternalDeviceClient = createExternalDeviceClient;
     this._createServer = createServer;
@@ -20,6 +28,7 @@ class ConnectorApp {
     this.server = null;
     this._buffer = new DeviceDataBuffer();    // 外部デバイスから受信したデータを蓄積するキュー
     this._poller = new DevicePoller(config.pollIntervalMs);    // 外部デバイスへのポーリング
+    this._writer = config.dataFilePath ? createDataWriter(config.dataFilePath) : null;
   }
 
   start() {
@@ -37,10 +46,13 @@ class ConnectorApp {
       this._poller.stop();
     });
 
-    // 外部デバイスからのデータ受け取り: バッファへ格納する
+    // 外部デバイスからのデータ受け取り: バッファへ格納しファイルへ追記する
     this.externalDeviceConnection.on(DEVICE_DATA, (data) => {
       console.log(`[connector] received: ${JSON.stringify(data)}`);
       this._buffer.update(data);
+
+      // TODO: ファイル IO は重いのである程度まとめて書き込む
+      this._writer?.write(this._buffer.latest());
     });
 
     // メインプロセスとの接続を受ける準備
@@ -50,20 +62,15 @@ class ConnectorApp {
     this.server.on('connection', (socket) => {
       console.log('[connector] main process connected');
 
-      // メインプロセスからの要求にはバッファの値を即時返却する
+      // メインプロセスからの要求にはバッファの最新 1 件を即時返却する
       socket.on(MAIN_REQUEST, () => {
-        if (!this._buffer.hasData) {
+        const item = this._buffer.latest();
+        if (item === null) {
           socket.emit(MAIN_NO_DATA);
           return;
         }
 
-        // TODO: メインプロセス側には常に最新の 1 件を返すようにし、
-        // かつ外部デバイスデータは全件保存できるようにする
-        const items = this._buffer.get();
-        socket.emit(MAIN_DATA, items.map(item => ({
-          data: item.data,
-          updatedAt: item.updatedAt.toISOString()
-        })));
+        socket.emit(MAIN_DATA, { data: item.data, updatedAt: item.updatedAt.toISOString() });
       });
     });
 

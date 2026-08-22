@@ -6,6 +6,7 @@ class DeviceDataBuffer {
   }
 
   // キューが最大件数を超える場合は最古のデータを削除（FIFO）してからキューに追加
+  // TODO: バッファへの追加であることが明確になるようにメソッド名を add に変更する
   update(data) {
     if (this._queue.length >= MAX_BUFFER_SIZE) {
       this._queue.shift();
@@ -14,19 +15,12 @@ class DeviceDataBuffer {
     this._queue.push({ data, updatedAt: new Date() });
   }
 
-  // キューが空なら null を返す、1件以上なら全件返してキューを空にする（drain）
-  get() {
+  // キューを消費せず最新 1 件を返す。キューが空なら null を返す。
+  latest() {
     if (this._queue.length === 0) {
       return null;
     }
-
-    const items = this._queue;
-    this._queue = [];
-    return items;
-  }
-
-  get hasData() {
-    return this._queue.length > 0;
+    return this._queue[this._queue.length - 1];
   }
 }
 

@@ -12,7 +12,22 @@ describe('ConnectorConfig コンストラクタ', () => {
     expect(config.deviceUrl).toBe('http://localhost:3001');
     expect(config.mainPort).toBe(4000);
     expect(config.pollIntervalMs).toBe(500);
+    expect(config.dataFilePath).toBeNull();
     expect(Object.isFrozen(config)).toBe(true);
+  });
+
+  it('dataFilePath を省略した場合は null として保持する', () => {
+    const config = new ConnectorConfig(VALID);
+    expect(config.dataFilePath).toBeNull();
+  });
+
+  it('dataFilePath に有効な文字列を渡した場合はその値を保持する', () => {
+    const config = new ConnectorConfig({ ...VALID, dataFilePath: '/path/to/file.jsonl' });
+    expect(config.dataFilePath).toBe('/path/to/file.jsonl');
+  });
+
+  it('dataFilePath が空文字列の場合は TypeError を送出する', () => {
+    expect(() => new ConnectorConfig({ ...VALID, dataFilePath: '' })).toThrow(TypeError);
   });
 
   it('deviceUrl が文字列でなければ TypeError を送出する', () => {

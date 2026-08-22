@@ -75,7 +75,7 @@ describe('ConnectorApp.start()', () => {
 
     expect(mockClientSocket.emit).toHaveBeenCalledWith(
       MAIN_DATA,
-      expect.arrayContaining([expect.objectContaining({ data: { value: 42 } })])
+      expect.objectContaining({ data: { value: 42 } })
     );
   });
 
@@ -90,13 +90,15 @@ describe('ConnectorApp.start()', () => {
 
     const call = mockClientSocket.emit.mock.calls.find(([name]) => name === MAIN_DATA);
     expect(call).toBeDefined();
+
+    // 配列ではなく単体オブジェクトであること
     const payload = call[1];
-    expect(Array.isArray(payload)).toBe(true);
-    expect(payload).toHaveLength(1);
-    expect(payload[0].data).toEqual({ value: 42 });
+    expect(Array.isArray(payload)).toBe(false);
+    expect(payload.data).toEqual({ value: 42 });
+
     // updatedAt は ISO8601 文字列であること
-    expect(typeof payload[0].updatedAt).toBe('string');
-    expect(new Date(payload[0].updatedAt).toISOString()).toBe(payload[0].updatedAt);
+    expect(typeof payload.updatedAt).toBe('string');
+    expect(new Date(payload.updatedAt).toISOString()).toBe(payload.updatedAt);
   });
 
   it('MAIN_REQUEST 受信時にバッファが空なら MAIN_NO_DATA を返す', () => {
@@ -109,8 +111,7 @@ describe('ConnectorApp.start()', () => {
     expect(mockClientSocket.emit).not.toHaveBeenCalledWith(MAIN_DATA, expect.anything());
   });
 
-  it('複数回 DEVICE_DATA を受信すると全件が蓄積されて返す', () => {
-    // DEVICE_DATA を複数回受信したら全件が配列で返る
+  it('複数回 DEVICE_DATA を受信しても最新 1 件のみを返す', () => {
     const onData = getCallback(mockExternalDeviceConnection.on, DEVICE_DATA);
     onData({ value: 1 });
     onData({ value: 2 });
@@ -120,12 +121,10 @@ describe('ConnectorApp.start()', () => {
     getCallback(mockClientSocket.on, MAIN_REQUEST)();
 
     const call = mockClientSocket.emit.mock.calls.find(([name]) => name === MAIN_DATA);
-    expect(call[1]).toHaveLength(2);
-    expect(call[1][0].data).toEqual({ value: 1 });
-    expect(call[1][1].data).toEqual({ value: 2 });
+    expect(call[1].data).toEqual({ value: 2 });
   });
 
-  it('MAIN_REQUEST 返却後はキューが空になる（drain）', () => {
+  it('MAIN_REQUEST 後もバッファが空にならない（drain しない）', () => {
     const onData = getCallback(mockExternalDeviceConnection.on, DEVICE_DATA);
     onData({ value: 1 });
 
@@ -133,11 +132,50 @@ describe('ConnectorApp.start()', () => {
     getCallback(mockMainServer.on, 'connection')(mockClientSocket);
 
     getCallback(mockClientSocket.on, MAIN_REQUEST)();
-    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA, expect.any(Array));
+    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA, expect.anything());
 
     mockClientSocket.emit.mockClear();
+    // 2 回目の MAIN_REQUEST でもデータを返す（空にならない）
     getCallback(mockClientSocket.on, MAIN_REQUEST)();
-    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_NO_DATA);
+    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA, expect.anything());
+    expect(mockClientSocket.emit).not.toHaveBeenCalledWith(MAIN_NO_DATA);
+  });
+
+  it('config.dataFilePath が null のとき createDataWriter が呼ばれない', () => {
+    const fakeCreateDataWriter = vi.fn(() => ({ write: vi.fn() }));
+    // CONFIG に dataFilePath なし → writer 不要
+    const appNoFile = new ConnectorApp(CONFIG, {
+      createExternalDeviceClient: fakeCreateExternalDeviceClient,
+      createServer: fakeCreateServer,
+      createDataWriter: fakeCreateDataWriter,
+    });
+    appNoFile.start();
+    expect(fakeCreateDataWriter).not.toHaveBeenCalled();
+  });
+
+  it('config.dataFilePath がある場合、DEVICE_DATA 受信時に writer.write() が呼ばれる', () => {
+    const mockConn = { on: vi.fn(), emit: vi.fn() };
+    const mockServer = { on: vi.fn() };
+    const mockWriter = { write: vi.fn() };
+    const fakeCreateDataWriter = vi.fn(() => mockWriter);
+
+    const appWithFile = new ConnectorApp(
+      { ...CONFIG, dataFilePath: '/path/to/file.jsonl' },
+      {
+        createExternalDeviceClient: vi.fn(() => mockConn),
+        createServer: vi.fn(() => mockServer),
+        createDataWriter: fakeCreateDataWriter,
+      }
+    );
+    appWithFile.start();
+
+    expect(fakeCreateDataWriter).toHaveBeenCalledWith('/path/to/file.jsonl');
+
+    getCallback(mockConn.on, DEVICE_DATA)({ value: 42 });
+    expect(mockWriter.write).toHaveBeenCalled();
+    const written = mockWriter.write.mock.calls[0][0];
+    expect(written.data).toEqual({ value: 42 });
+    expect(written.updatedAt).toBeInstanceOf(Date);
   });
 
   it('disconnect 時にポーリングを停止し DEVICE_REQUEST を送信しなくなる', () => {

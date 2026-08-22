@@ -2,9 +2,21 @@ const fs = require('fs');
 const { DeviceDataWriter } = require('../../deviceDataWriter');
 
 describe('DeviceDataWriter', () => {
+  // DeviceDataWriter のコンストラクタでファイル保存先ディレクトリを作るため、テスト実行前にディレクトリを作らないようにする
+  beforeEach(() => {
+    vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {});
+  });
+
   // 各テスト実行後に行われる処理
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('コンストラクタでファイル保存先ディレクトリを作成する', () => {
+    // ディレクトリ作成処理のモック化は beforeEach で行う前提で成り立つコードであることに注意
+    new DeviceDataWriter('/path/to/file.jsonl');
+
+    expect(fs.mkdirSync).toHaveBeenCalledWith('/path/to', { recursive: true });
   });
 
   it('write() が指定パスへ JSON Lines 形式で追記する', () => {

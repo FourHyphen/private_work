@@ -55,11 +55,15 @@ class ConnectorApp {
 
       // TODO: 
       // 1. json 保存を非同期キューへ切り替える
-      // 2. 書き込み失敗時のエラーハンドリングを検討する
       // 3. ファイル IO は重いのである程度まとめて書き込む
       // 4. json 保存ファイルをローテーションする
       // 5. ファイル書き込み成功したデータを `DeviceDataBuffer` のバッファから削除する
-      this._writer?.write(this._buffer.latest());
+
+      try {
+        this._writer?.write(this._buffer.latest());
+      } catch (error) {
+        console.error('[connector] failed to write device data', { error, data });
+      }
     });
 
     // メインプロセスとの接続を受ける準備

@@ -206,6 +206,32 @@ describe('ConnectorApp.start()', () => {
     expect(written.updatedAt).toBeInstanceOf(Date);
   });
 
+  it('writer.write() が失敗してもエラーを処理し、受信データを保持する', () => {
+    // メモ: エラーハンドリングは TODO 残ってる
+    const mockConn = { on: vi.fn(), emit: vi.fn() };
+    const mockServer = { on: vi.fn() };
+    const error = new Error('write failed');
+    const mockWriter = { write: vi.fn(() => { throw error; }) };
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const appWithFile = new ConnectorApp(
+      { ...CONFIG, dataFilePath: '/path/to/file.jsonl' },
+      {
+        createExternalDeviceClient: vi.fn(() => mockConn),
+        createServer: vi.fn(() => mockServer),
+        createDataWriter: vi.fn(() => mockWriter),
+      }
+    );
+
+    appWithFile.start();
+
+    expect(() => getCallback(mockConn.on, DEVICE_DATA)({ value: 42 })).not.toThrow();
+    expect(consoleError).toHaveBeenCalledWith(
+      '[connector] failed to write device data',
+      { error, data: { value: 42 } }
+    );
+    expect(appWithFile._buffer.latest().data).toEqual({ value: 42 });
+  });
+
   it('disconnect 時にポーリングを停止し DEVICE_REQUEST を送信しなくなる', () => {
     vi.useFakeTimers();
 

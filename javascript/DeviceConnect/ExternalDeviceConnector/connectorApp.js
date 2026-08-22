@@ -57,8 +57,8 @@ class ConnectorApp {
           return;
         }
 
-        // TODO: get() はキューの全件を返してキューを空にする処理。送信失敗時もキューが空になる
-        // 送信成功時のみキューを空にするよう変更する
+        // TODO: メインプロセス側には常に最新の 1 件を返すようにし、
+        // かつ外部デバイスデータは全件保存できるようにする
         const items = this._buffer.get();
         socket.emit(MAIN_DATA, items.map(item => ({
           data: item.data,

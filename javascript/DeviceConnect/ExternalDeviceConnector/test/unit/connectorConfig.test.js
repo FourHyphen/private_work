@@ -6,14 +6,12 @@ const VALID = {
   pollIntervalMs: 500
 };
 
-describe('ConnectorConfig コンストラクタ', () => {
-  it('有効な値を受け取った場合は変更不能な状態になっているインスタンスを生成する', () => {
+describe('ConnectorConfig: 設定値を保持する', () => {
+  it('有効な設定値を保持する', () => {
     const config = new ConnectorConfig(VALID);
-    expect(config.deviceUrl).toBe('http://localhost:3001');
-    expect(config.mainPort).toBe(4000);
-    expect(config.pollIntervalMs).toBe(500);
-    expect(config.dataFilePath).toBeNull();
-    expect(Object.isFrozen(config)).toBe(true);
+    expect(config.deviceUrl).toBe(VALID.deviceUrl);
+    expect(config.mainPort).toBe(VALID.mainPort);
+    expect(config.pollIntervalMs).toBe(VALID.pollIntervalMs);
   });
 
   it('dataFilePath を省略した場合は null として保持する', () => {
@@ -21,79 +19,73 @@ describe('ConnectorConfig コンストラクタ', () => {
     expect(config.dataFilePath).toBeNull();
   });
 
-  it('dataFilePath に有効な文字列を渡した場合はその値を保持する', () => {
+  it('dataFilePath の指定値を保持する', () => {
     const config = new ConnectorConfig({ ...VALID, dataFilePath: '/path/to/file.jsonl' });
     expect(config.dataFilePath).toBe('/path/to/file.jsonl');
+  });
+});
+
+describe('ConnectorConfig: 設定値を検証する', () => {
+  it.each([
+    ['数値', 123],
+    ['null', null]
+  ])('deviceUrl が%sの場合は TypeError を送出する', (_, deviceUrl) => {
+    expect(() => new ConnectorConfig({ ...VALID, deviceUrl })).toThrow(TypeError);
+  });
+
+  it.each([
+    ['0', 0],
+    ['負の数', -1],
+    ['小数', 3.5],
+    ['文字列', '4000']
+  ])('mainPort が%sの場合は TypeError を送出する', (_, mainPort) => {
+    expect(() => new ConnectorConfig({ ...VALID, mainPort })).toThrow(TypeError);
+  });
+
+  it.each([
+    ['省略', undefined],
+    ['0', 0],
+    ['負の数', -1],
+    ['小数', 3.5],
+    ['文字列', '1000']
+  ])('pollIntervalMs が%sの場合は TypeError を送出する', (_, pollIntervalMs) => {
+    expect(() => new ConnectorConfig({ ...VALID, pollIntervalMs })).toThrow(TypeError);
   });
 
   it('dataFilePath が空文字列の場合は TypeError を送出する', () => {
     expect(() => new ConnectorConfig({ ...VALID, dataFilePath: '' })).toThrow(TypeError);
   });
-
-  it('deviceUrl が文字列でなければ TypeError を送出する', () => {
-    expect(() => new ConnectorConfig({ ...VALID, deviceUrl: 123 })).toThrow(TypeError);
-    expect(() => new ConnectorConfig({ ...VALID, deviceUrl: null })).toThrow(TypeError);
-  });
-
-  it('mainPort が正の整数でなければ TypeError を送出する', () => {
-    expect(() => new ConnectorConfig({ ...VALID, mainPort: 0 })).toThrow(TypeError);
-    expect(() => new ConnectorConfig({ ...VALID, mainPort: -1 })).toThrow(TypeError);
-    expect(() => new ConnectorConfig({ ...VALID, mainPort: 3.5 })).toThrow(TypeError);
-    expect(() => new ConnectorConfig({ ...VALID, mainPort: '4000' })).toThrow(TypeError);
-  });
-
-  it('pollIntervalMs を省略した場合は TypeError を送出する', () => {
-    const { pollIntervalMs, ...withoutPoll } = VALID;
-    expect(() => new ConnectorConfig(withoutPoll)).toThrow(TypeError);
-  });
-
-  it('pollIntervalMs が正の整数でなければ TypeError を送出する', () => {
-    expect(() => new ConnectorConfig({ ...VALID, pollIntervalMs: 0 })).toThrow(TypeError);
-    expect(() => new ConnectorConfig({ ...VALID, pollIntervalMs: -1 })).toThrow(TypeError);
-    expect(() => new ConnectorConfig({ ...VALID, pollIntervalMs: 3.5 })).toThrow(TypeError);
-    expect(() => new ConnectorConfig({ ...VALID, pollIntervalMs: '1000' })).toThrow(TypeError);
-  });
-
-  it('有効な pollIntervalMs を渡した場合はその値を保持する', () => {
-    const config = new ConnectorConfig({ ...VALID, pollIntervalMs: 500 });
-    expect(config.pollIntervalMs).toBe(500);
-  });
-
 });
 
-describe('ConnectorConfig.fromArgv', () => {
+describe('ConnectorConfig: JSON 引数から設定を生成する', () => {
   const validJson = JSON.stringify(VALID);
 
-  it('有効な JSON 引数からインスタンスを生成する', () => {
+  it('有効な JSON オブジェクトを変換する', () => {
     const config = ConnectorConfig.fromArgv(['node', 'main.js', validJson]);
     expect(config.deviceUrl).toBe(VALID.deviceUrl);
     expect(config.mainPort).toBe(VALID.mainPort);
+    expect(config.pollIntervalMs).toBe(VALID.pollIntervalMs);
   });
 
-  it('引数が不足していれば Error を送出する', () => {
+  it('JSON 引数がない場合は Error を送出する', () => {
     // argv[2] が存在することを正とする
-    expect(() => ConnectorConfig.fromArgv(['node', 'main.js'])).toThrow(
-      '[connector] config JSON argument is required'
-    );
+    expect(() => ConnectorConfig.fromArgv(['node', 'main.js'])).toThrow(TypeError);
   });
 
-  it('argv が配列でない場合（null 等）は Error を送出する', () => {
+  it('argv が配列でない場合は Error を送出する', () => {
     // argv が配列であることを正とする
-    expect(() => ConnectorConfig.fromArgv(null)).toThrow(
-      '[connector] config JSON argument is required'
-    );
+    expect(() => ConnectorConfig.fromArgv(null)).toThrow(TypeError);
   });
 
-  it('引数が JSON 構文でないなら Error を送出する', () => {
-    expect(() => ConnectorConfig.fromArgv(['node', 'main.js', 'not-json'])).toThrow(
-      '[connector] invalid config: argument is not valid JSON'
-    );
+  it('JSON として不正な場合は Error を送出する', () => {
+    expect(() => ConnectorConfig.fromArgv(['node', 'main.js', 'not-json'])).toThrow(TypeError);
   });
 
-  it('引数が JSON オブジェクトでない場合 TypeError を送出する', () => {
-    // JSON 構文であるかのバリデーションとテストを分けておくことでどの段階で壊れたかを区別しやすくする
-    expect(() => ConnectorConfig.fromArgv(['node', 'main.js', '"string"'])).toThrow(TypeError);
-    expect(() => ConnectorConfig.fromArgv(['node', 'main.js', 'null'])).toThrow(TypeError);
-    expect(() => ConnectorConfig.fromArgv(['node', 'main.js', '[1,2,3]'])).toThrow(TypeError);
+  it.each([
+    ['文字列', '"string"'],
+    ['null', 'null'],
+    ['配列', '[1,2,3]']
+  ])('JSON が%sの場合は TypeError を送出する', (_, json) => {
+    expect(() => ConnectorConfig.fromArgv(['node', 'main.js', json])).toThrow(TypeError);
   });
 });

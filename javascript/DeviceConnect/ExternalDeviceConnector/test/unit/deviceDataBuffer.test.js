@@ -51,3 +51,57 @@ describe('DeviceDataBuffer', () => {
     expect(result.data).toEqual({ value: MAX_BUFFER_SIZE });
   });
 });
+
+describe('DeviceDataBuffer.getDataPendingFileSave()', () => {
+  it('空バッファで空配列を返す', () => {
+    const buffer = new DeviceDataBuffer();
+    expect(buffer.getDataPendingFileSave()).toEqual([]);
+  });
+
+  it('追加された全データを返す', () => {
+    const buffer = new DeviceDataBuffer();
+    buffer.update({ value: 1 });
+    buffer.update({ value: 2 });
+    const pending = buffer.getDataPendingFileSave();
+    expect(pending).toHaveLength(2);
+    expect(pending[0].data).toEqual({ value: 1 });
+    expect(pending[1].data).toEqual({ value: 2 });
+  });
+
+  it('返したデータは次回呼び出しでも再度返される（消費されない）', () => {
+    const buffer = new DeviceDataBuffer();
+    buffer.update({ value: 1 });
+    expect(buffer.getDataPendingFileSave()).toHaveLength(1);
+    expect(buffer.getDataPendingFileSave()).toHaveLength(1);
+  });
+
+  it('latest() の返す値に影響しない', () => {
+    const buffer = new DeviceDataBuffer();
+    buffer.update({ value: 1 });
+    buffer.update({ value: 2 });
+    buffer.getDataPendingFileSave();
+    expect(buffer.latest().data).toEqual({ value: 2 });
+  });
+
+  it('MAX_BUFFER_SIZE 超過で最古が溢れても pending は残存するデータを返す', () => {
+    const buffer = new DeviceDataBuffer();
+
+    // バッファ満杯まで格納
+    for (let i = 0; i < MAX_BUFFER_SIZE; i++) {
+      buffer.update({ value: i });
+    }
+
+    // 超過分
+    buffer.update({ value: MAX_BUFFER_SIZE });
+
+    // バッファ超過していないことを確認
+    const pending = buffer.getDataPendingFileSave();
+    expect(pending).toHaveLength(MAX_BUFFER_SIZE);
+
+    // FIFO のため最新データは i = 0 でなく i = 1
+    expect(pending[0].data).toEqual({ value: 1 });
+
+    // 最新データは超過分として入れた MAX_BUFFER_SIZE
+    expect(pending[pending.length - 1].data).toEqual({ value: MAX_BUFFER_SIZE });
+  });
+});

@@ -105,3 +105,51 @@ describe('DeviceDataBuffer.getDataPendingFileSave()', () => {
     expect(pending[pending.length - 1].data).toEqual({ value: MAX_BUFFER_SIZE });
   });
 });
+
+describe('DeviceDataBuffer.markFileSaved()', () => {
+  it('count 分だけ _fileSaveIndex が進む', () => {
+    const buffer = new DeviceDataBuffer();
+    buffer.update({ value: 1 });
+    buffer.update({ value: 2 });
+    buffer.markFileSaved(2);
+    expect(buffer.getDataPendingFileSave()).toHaveLength(0);
+  });
+
+  it('count が queue 長を超えても _fileSaveIndex は queue 長に留まる', () => {
+    const buffer = new DeviceDataBuffer();
+    buffer.update({ value: 1 });
+    buffer.markFileSaved(999);
+    expect(buffer._fileSaveIndex).toBe(1);
+  });
+
+  it('markFileSaved 後に追加したデータは再び pending に現れる', () => {
+    const buffer = new DeviceDataBuffer();
+    buffer.update({ value: 1 });
+    buffer.markFileSaved(1);
+    buffer.update({ value: 2 });
+    const pending = buffer.getDataPendingFileSave();
+    expect(pending).toHaveLength(1);
+    expect(pending[0].data).toEqual({ value: 2 });
+  });
+
+  it('latest() に影響しない', () => {
+    const buffer = new DeviceDataBuffer();
+    buffer.update({ value: 1 });
+    buffer.update({ value: 2 });
+    buffer.markFileSaved(2);
+    expect(buffer.latest().data).toEqual({ value: 2 });
+  });
+
+  it('MAX_BUFFER_SIZE 超過で先頭が溢れると _fileSaveIndex が補正される', () => {
+    const buffer = new DeviceDataBuffer();
+    for (let i = 0; i < MAX_BUFFER_SIZE; i++) {
+      buffer.update({ value: i });
+    }
+    // 全件保存済みにしてからバッファ超過させる
+    buffer.markFileSaved(MAX_BUFFER_SIZE);
+    buffer.update({ value: MAX_BUFFER_SIZE });
+
+    // 溢れた分だけ _fileSaveIndex が補正されて超過しないこと
+    expect(buffer._fileSaveIndex).toBe(MAX_BUFFER_SIZE - 1);
+  });
+});

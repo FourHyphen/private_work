@@ -51,4 +51,27 @@ describe('DeviceDataWriter', () => {
     expect(lines[0]).toBe('{"data":{"value":1},"updatedAt":"2026-08-22T10:00:00.000Z"}\n');
     expect(lines[1]).toBe('{"data":{"value":2},"updatedAt":"2026-08-22T10:00:00.100Z"}\n');
   });
+
+  it('writeBatch() が複数アイテムを 1 回の appendFileSync で書き込む', () => {
+    const spy = vi.spyOn(fs, 'appendFileSync').mockImplementation(() => {});
+    const writer = new DeviceDataWriter('/path/to/file.jsonl');
+    const items = [
+      { data: { value: 1 }, updatedAt: new Date('2026-08-22T10:00:00.000Z') },
+      { data: { value: 2 }, updatedAt: new Date('2026-08-22T10:00:00.100Z') },
+    ];
+    writer.writeBatch(items);
+
+    expect(spy).toHaveBeenCalledOnce();
+    expect(spy).toHaveBeenCalledWith(
+      '/path/to/file.jsonl',
+      '{"data":{"value":1},"updatedAt":"2026-08-22T10:00:00.000Z"}\n{"data":{"value":2},"updatedAt":"2026-08-22T10:00:00.100Z"}\n'
+    );
+  });
+
+  it('writeBatch() に空配列を渡すと appendFileSync を呼ばない', () => {
+    const spy = vi.spyOn(fs, 'appendFileSync').mockImplementation(() => {});
+    const writer = new DeviceDataWriter('/path/to/file.jsonl');
+    writer.writeBatch([]);
+    expect(spy).not.toHaveBeenCalled();
+  });
 });

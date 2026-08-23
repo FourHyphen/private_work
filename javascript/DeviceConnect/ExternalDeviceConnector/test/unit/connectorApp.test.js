@@ -174,12 +174,15 @@ describe('ConnectorApp.start()', () => {
     expect(fakeCreateDataWriter).not.toHaveBeenCalled();
   });
 
-  it('config.dataFilePath がある場合、DEVICE_DATA 受信時に writer.write() が呼ばれる', () => {
-    // dataFilePath ありの ConnectorApp を作成
+  it('config.dataFilePath がある場合、DEVICE_DATA 受信後にフラッシュ間隔で writeBatch() が呼ばれる', () => {
+    vi.useFakeTimers();
+
     const mockConn = { on: vi.fn(), emit: vi.fn() };
     const mockServer = { on: vi.fn() };
-    const mockWriter = { write: vi.fn() };
+    const mockWriter = { writeBatch: vi.fn() };
     const fakeCreateDataWriter = vi.fn(() => mockWriter);
+
+    // dataFilePath がある ConnectorApp を作成
     const appWithFile = new ConnectorApp(
       { ...CONFIG, dataFilePath: '/path/to/file.jsonl' },
       {
@@ -189,29 +192,34 @@ describe('ConnectorApp.start()', () => {
       }
     );
 
-    // start() して createDataWriter が呼ばれることを確認する
     appWithFile.start();
-
     expect(fakeCreateDataWriter).toHaveBeenCalledWith('/path/to/file.jsonl');
 
     // 外部デバイスからデータ受信
     getCallback(mockConn.on, DEVICE_DATA)({ value: 42 });
 
-    // writer.write() が呼ばれることを確認する
-    expect(mockWriter.write).toHaveBeenCalled();
+    // フラッシュ前は writeBatch は呼ばれない
+    expect(mockWriter.writeBatch).not.toHaveBeenCalled();
 
-    // ファイル記載内容が意図通りか確認する
-    const written = mockWriter.write.mock.calls[0][0];
-    expect(written.data).toEqual({ value: 42 });
-    expect(written.updatedAt).toBeInstanceOf(Date);
+    // フラッシュ間隔経過で writeBatch が呼ばれる
+    vi.advanceTimersByTime(500);
+    expect(mockWriter.writeBatch).toHaveBeenCalledOnce();
+
+    // writeBatch() 呼び出し内容を確認する
+    const written = mockWriter.writeBatch.mock.calls[0][0];
+    expect(written).toHaveLength(1);
+    expect(written[0].data).toEqual({ value: 42 });
+    expect(written[0].updatedAt).toBeInstanceOf(Date);
   });
 
-  it('writer.write() が失敗してもエラーを処理し、受信データを保持する', () => {
-    // メモ: エラーハンドリングは TODO 残ってる
+  it('writeBatch() が失敗してもエラーを処理し、受信データを保持する', () => {
+    vi.useFakeTimers();
+
+    // dataFilePath がある ConnectorApp を作成
     const mockConn = { on: vi.fn(), emit: vi.fn() };
     const mockServer = { on: vi.fn() };
     const error = new Error('write failed');
-    const mockWriter = { write: vi.fn(() => { throw error; }) };
+    const mockWriter = { writeBatch: vi.fn(() => { throw error; }) };
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const appWithFile = new ConnectorApp(
       { ...CONFIG, dataFilePath: '/path/to/file.jsonl' },
@@ -223,12 +231,14 @@ describe('ConnectorApp.start()', () => {
     );
 
     appWithFile.start();
+    getCallback(mockConn.on, DEVICE_DATA)({ value: 42 });
 
-    expect(() => getCallback(mockConn.on, DEVICE_DATA)({ value: 42 })).not.toThrow();
-    expect(consoleError).toHaveBeenCalledWith(
-      '[connector] failed to write device data',
-      { error, data: { value: 42 } }
-    );
+    // フラッシュ失敗してもクラッシュしない
+    expect(() => vi.advanceTimersByTime(500)).not.toThrow();
+    expect(consoleError).toHaveBeenCalledWith('[connector] write failed:', error);
+
+    // 書き込み失敗のためインデックスは進まず、バッファのデータは残っている
+    expect(appWithFile._buffer.getDataPendingFileSave()).toHaveLength(1);
     expect(appWithFile._buffer.latest().data).toEqual({ value: 42 });
   });
 
@@ -282,5 +292,59 @@ describe('ConnectorApp.start()', () => {
       ([name]) => name === DEVICE_REQUEST
     );
     expect(deviceRequestCalls).toHaveLength(1);
+  });
+
+  it('フラッシュ間隔ごとに未保存データが writeBatch される', () => {
+    vi.useFakeTimers();
+
+    const mockConn = { on: vi.fn(), emit: vi.fn() };
+    const mockServer = { on: vi.fn() };
+    const mockWriter = { writeBatch: vi.fn() };
+
+    // writeBatch() を動かすため、dataFilePath がある ConnectorApp を作成
+    const appWithFile = new ConnectorApp(
+      { ...CONFIG, dataFilePath: '/path/to/file.jsonl' },
+      {
+        createExternalDeviceClient: vi.fn(() => mockConn),
+        createServer: vi.fn(() => mockServer),
+        createDataWriter: vi.fn(() => mockWriter),
+      }
+    );
+    appWithFile.start();
+
+    const onData = getCallback(mockConn.on, DEVICE_DATA);
+    onData({ value: 1 });
+    onData({ value: 2 });
+
+    // 1 回目のフラッシュで 2 件まとめて書き込まれる
+    vi.advanceTimersByTime(500);
+    expect(mockWriter.writeBatch).toHaveBeenCalledOnce();
+    expect(mockWriter.writeBatch.mock.calls[0][0]).toHaveLength(2);
+
+    // 2 回目のフラッシュでは pending がないため writeBatch は呼ばれない
+    mockWriter.writeBatch.mockClear();
+    vi.advanceTimersByTime(500);
+    expect(mockWriter.writeBatch).not.toHaveBeenCalled();
+
+    // 新規データ追加後の 3 回目フラッシュの場合は 1 件のみ書き込まれる
+    onData({ value: 3 });
+    vi.advanceTimersByTime(500);
+    expect(mockWriter.writeBatch).toHaveBeenCalledOnce();
+    expect(mockWriter.writeBatch.mock.calls[0][0]).toHaveLength(1);
+    expect(mockWriter.writeBatch.mock.calls[0][0][0].data).toEqual({ value: 3 });
+  });
+
+  it('config.dataFilePath が null のときフラッシュタイマーは起動しない', () => {
+    vi.useFakeTimers();
+
+    const mockConn = { on: vi.fn(), emit: vi.fn() };
+    const mockServer = { on: vi.fn() };
+    const appNoFile = new ConnectorApp(CONFIG, {
+      createExternalDeviceClient: vi.fn(() => mockConn),
+      createServer: vi.fn(() => mockServer),
+    });
+    appNoFile.start();
+
+    expect(appNoFile._flushTimer).toBeUndefined();
   });
 });

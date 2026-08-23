@@ -10,8 +10,20 @@ class DeviceDataWriter {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
   }
 
+  // 1 件ファイルに書き込み
   write(item) {
     const line = JSON.stringify({ data: item.data, updatedAt: item.updatedAt.toISOString() }) + '\n';
+    fs.appendFileSync(this._filePath, line);
+  }
+
+  // 複数件まとめてファイルに書き込み
+  writeBatch(items) {
+    if (items.length === 0) return;
+
+    const line = items.map(item =>
+      JSON.stringify({ data: item.data, updatedAt: item.updatedAt.toISOString() })
+    ).join('\n') + '\n';
+
     fs.appendFileSync(this._filePath, line);
   }
 }

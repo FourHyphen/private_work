@@ -1,5 +1,6 @@
 const { Server } = require('socket.io');
 const { io: clientIo } = require('socket.io-client');
+const FLUSH_INTERVAL_MS = 500;
 const {
   DEVICE_REQUEST,
   DEVICE_DATA,
@@ -48,26 +49,19 @@ class ConnectorApp {
       this._poller.stop();
     });
 
-    // 外部デバイスからのデータ受け取り: バッファへ格納しファイルへ追記する
+    // 外部デバイスからのデータ受け取り: バッファへ格納する
     this.externalDeviceConnection.on(DEVICE_DATA, (data) => {
       console.log(`[connector] received: ${JSON.stringify(data)}`);
       this._buffer.update(data);
-
-      // TODO: 
-      // 1. json 保存を非同期キューへ切り替える
-      // 3. ファイル IO は重いのである程度まとめて書き込む
-      // 4. json 保存ファイルをローテーションする
-      // 5. ファイル書き込み成功したデータを `DeviceDataBuffer` のバッファから削除する
-
-      try {
-        this._writer?.write(this._buffer.latest());
-      } catch (error) {
-        console.error('[connector] failed to write device data', { error, data });
-      }
     });
 
     // メインプロセスとの接続を受ける準備
     this.server = this._createServer(this.config.mainPort);
+
+    // 一定間隔でバッファの未保存データをまとめてファイルへ書き込む
+    if (this._writer) {
+      this._flushTimer = setInterval(() => this._flushPending(), FLUSH_INTERVAL_MS);
+    }
 
     // メインプロセスからの接続受理時
     this.server.on('connection', (socket) => {
@@ -89,6 +83,20 @@ class ConnectorApp {
     });
 
     console.log(`[connector] listening for main process on ${this.config.mainPort}`);
+  }
+
+  // バッファのファイル未保存データをまとめてファイルへ書き込み、成功分をバッファに通知する
+  _flushPending() {
+    const pending = this._buffer.getDataPendingFileSave();
+    if (pending.length === 0) return;
+
+    try {
+      this._writer.writeBatch(pending);              // 書き込み
+      this._buffer.markFileSaved(pending.length);    // 書き込み成功データ件数をバッファに通知
+    } catch (err) {
+      // 書き込み失敗時は書き込み成功データ件数を増やさない
+      console.error('[connector] write failed:', err);
+    }
   }
 }
 

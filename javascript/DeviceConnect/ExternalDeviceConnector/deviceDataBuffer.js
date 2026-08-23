@@ -25,8 +25,13 @@ class DeviceDataBuffer {
 
   // ファイル未保存のデータをすべて返す（消費しない）
   getDataPendingFileSave() {
-    // fileSaveIndex より前は保存済み扱い、以降は未保存扱い
+    // _fileSaveIndex より前は保存済み扱い、以降は未保存扱い
     return this._queue.slice(this._fileSaveIndex);
+  }
+
+  // バッファデータのうちファイル保存済み件数を記録する
+  markFileSaved(count) {
+    this._fileSaveIndex = Math.min(this._fileSaveIndex + count, this._queue.length);
   }
 
   // キューを消費せず最新 1 件を返す。キューが空なら null を返す。

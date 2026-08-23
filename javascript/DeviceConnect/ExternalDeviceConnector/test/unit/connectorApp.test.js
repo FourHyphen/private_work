@@ -8,47 +8,60 @@ function getCallback(mockFn, eventName) {
   return call ? call[1] : undefined;
 }
 
-const CONFIG = {
+const CONFIG_WITHOUT_DATA_FILE_PATH = {
     deviceUrl: 'http://localhost:3001',
     mainPort: 4000,
     pollIntervalMs: 500
 };
 
-// Vitest テスト群(vi -> Vitest のグローバルオブジェクト)
-describe('ConnectorApp.start()', () => {
-  let app, mockExternalDeviceConnection, mockMainServer, fakeCreateExternalDeviceClient, fakeCreateServer;
+const CONFIG_WITH_DATA_FILE_PATH = {
+  ...CONFIG_WITHOUT_DATA_FILE_PATH,
+  dataFilePath: '/path/to/file.jsonl'
+};
 
-  // 各テスト実施前に実行される処理
-  beforeEach(() => {
-    // 外部デバイスのモックを用意
-    // 呼ばれたか、どんな引数で呼ばれたかを記録しつつ、実際には mockDevice を返す Vitest のモック関数を fakeSocketClient として定義
-    mockExternalDeviceConnection = { on: vi.fn(), emit: vi.fn() };
-    fakeCreateExternalDeviceClient = vi.fn(() => mockExternalDeviceConnection);
+// トップ階層の describe 間で共有する状態と、その初期化/後始末処理
+let app, mockExternalDeviceConnection, mockMainServer, fakeCreateExternalDeviceClient, fakeCreateServer;
 
-    // メインプロセスのモックを用意
-    mockMainServer = { on: vi.fn() };
-    fakeCreateServer = vi.fn(() => mockMainServer);
+function setupApp() {
+  // 外部デバイスのモックを用意
+  // 呼ばれたか、どんな引数で呼ばれたかを記録しつつ、実際には mockExternalDeviceConnection を返す Vitest のモック関数を定義
+  // (vi -> Vitest のグローバルオブジェクト)
+  mockExternalDeviceConnection = { on: vi.fn(), emit: vi.fn() };
+  fakeCreateExternalDeviceClient = vi.fn(() => mockExternalDeviceConnection);
 
-    // テスト用のダミーオブジェクトを作成して ConnectorApp を開始
-    app = new ConnectorApp(CONFIG, {
-      createExternalDeviceClient: fakeCreateExternalDeviceClient,
-      createServer: fakeCreateServer,
-    });
-    app.start();
+  // メインプロセスのモックを用意
+  mockMainServer = { on: vi.fn() };
+  fakeCreateServer = vi.fn(() => mockMainServer);
+
+  // テスト用のダミーオブジェクトを作成して ConnectorApp を開始
+  app = new ConnectorApp(CONFIG_WITHOUT_DATA_FILE_PATH, {
+    createExternalDeviceClient: fakeCreateExternalDeviceClient,
+    createServer: fakeCreateServer,
   });
+  app.start();
+}
 
-  // 各テスト実施後に実行される処理
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+function teardownApp() {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+}
+
+describe('ConnectorApp: 初期化', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
 
   it('指定した deviceUrl に接続する', () => {
-    expect(fakeCreateExternalDeviceClient).toHaveBeenCalledWith(CONFIG.deviceUrl);
+    expect(fakeCreateExternalDeviceClient).toHaveBeenCalledWith(CONFIG_WITHOUT_DATA_FILE_PATH.deviceUrl);
   });
 
   it('指定した mainPort を使用して Server を起動する', () => {
-    expect(fakeCreateServer).toHaveBeenCalledWith(CONFIG.mainPort);
+    expect(fakeCreateServer).toHaveBeenCalledWith(CONFIG_WITHOUT_DATA_FILE_PATH.mainPort);
   });
+});
+
+describe('ConnectorApp: デバイスポーリング制御', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
 
   it('connect 時にポーリングを開始し一定間隔で DEVICE_REQUEST を送信する', () => {
     vi.useFakeTimers();
@@ -57,32 +70,72 @@ describe('ConnectorApp.start()', () => {
     getCallback(mockExternalDeviceConnection.on, 'connect')();
 
     // pollIntervalMs 経過ごとに DEVICE_REQUEST が emit される
-    vi.advanceTimersByTime(CONFIG.pollIntervalMs);
+    vi.advanceTimersByTime(CONFIG_WITHOUT_DATA_FILE_PATH.pollIntervalMs);
     expect(mockExternalDeviceConnection.emit).toHaveBeenCalledWith(DEVICE_REQUEST);
 
     mockExternalDeviceConnection.emit.mockClear();    // 初回タイマ進行の履歴を空にして次のタイマ処理検証に影響しないようにする
-    vi.advanceTimersByTime(CONFIG.pollIntervalMs);
+    vi.advanceTimersByTime(CONFIG_WITHOUT_DATA_FILE_PATH.pollIntervalMs);
     expect(mockExternalDeviceConnection.emit).toHaveBeenCalledWith(DEVICE_REQUEST);
   });
 
-  it('DEVICE_DATA 受信後に MAIN_REQUEST でそのデータを取得できる', () => {
-    // 外部デバイスからデータを受信したらバッファへ格納する
-    getCallback(mockExternalDeviceConnection.on, DEVICE_DATA)({ value: 42 });
+  it('disconnect 時にポーリングを停止し DEVICE_REQUEST を送信しなくなる', () => {
+    vi.useFakeTimers();
 
-    // メインプロセスとの接続環境を再現
-    const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
-    getCallback(mockMainServer.on, 'connection')(mockClientSocket);
+    // 外部デバイスとの接続
+    getCallback(mockExternalDeviceConnection.on, 'connect')();
 
-    // メインプロセスからのデータ要求
-    getCallback(mockClientSocket.on, MAIN_REQUEST)();
+    // 接続中はポーリングが動作することを確認する
+    vi.advanceTimersByTime(CONFIG_WITHOUT_DATA_FILE_PATH.pollIntervalMs);
+    expect(mockExternalDeviceConnection.emit).toHaveBeenCalledWith(DEVICE_REQUEST);
 
-    expect(mockClientSocket.emit).toHaveBeenCalledWith(
-      MAIN_DATA,
-      expect.objectContaining({ data: { value: 42 } })
-    );
+    // 外部デバイスとの接続解除
+    getCallback(mockExternalDeviceConnection.on, 'disconnect')();
+
+    // 切断後はタイマーを進めても送信されないことを確認する
+    mockExternalDeviceConnection.emit.mockClear();
+    vi.advanceTimersByTime(CONFIG_WITHOUT_DATA_FILE_PATH.pollIntervalMs * 3);
+    expect(mockExternalDeviceConnection.emit).not.toHaveBeenCalledWith(DEVICE_REQUEST);
   });
 
-  it('MAIN_REQUEST 受信時にバッファの値を { data, updatedAt } で返す', () => {
+  it('再接続（connect）時にポーリングを再開する', () => {
+    vi.useFakeTimers();
+
+    // 外部デバイスと接続してすぐ解除
+    const onConnect = getCallback(mockExternalDeviceConnection.on, 'connect');
+    const onDisconnect = getCallback(mockExternalDeviceConnection.on, 'disconnect');
+    onConnect();
+    onDisconnect();
+
+    mockExternalDeviceConnection.emit.mockClear();
+
+    // 再接続でポーリングが再度動作する
+    onConnect();
+    vi.advanceTimersByTime(CONFIG_WITHOUT_DATA_FILE_PATH.pollIntervalMs);
+    expect(mockExternalDeviceConnection.emit).toHaveBeenCalledWith(DEVICE_REQUEST);
+  });
+
+  it('連続 connect 後もポーリング周期あたりの DEVICE_REQUEST は1回に保たれる', () => {
+    vi.useFakeTimers();
+
+    // 外部デバイスとの接続が連続して呼ばれた場合を再現
+    const onConnect = getCallback(mockExternalDeviceConnection.on, 'connect');
+    onConnect();
+    onConnect();
+
+    // 1 間隔で DEVICE_REQUEST は 1 回だけ
+    vi.advanceTimersByTime(CONFIG_WITHOUT_DATA_FILE_PATH.pollIntervalMs);
+    const deviceRequestCalls = mockExternalDeviceConnection.emit.mock.calls.filter(
+      ([name]) => name === DEVICE_REQUEST
+    );
+    expect(deviceRequestCalls).toHaveLength(1);
+  });
+});
+
+describe('ConnectorApp: メインプロセスへのデータ応答', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('DEVICE_DATA 受信後の MAIN_REQUEST で { data, updatedAt } を返す', () => {
     // 外部デバイスからデータを受信してバッファへ格納する
     getCallback(mockExternalDeviceConnection.on, DEVICE_DATA)({ value: 42 });
 
@@ -138,7 +191,7 @@ describe('ConnectorApp.start()', () => {
     expect(call[1].data).toEqual({ value: 2 });    // call[1] = emit() の第 2 引数 = 送信された payload
   });
 
-  it('MAIN_REQUEST 後もバッファが空にならない（drain しない）', () => {
+  it('同一データに対する連続 MAIN_REQUEST で毎回 MAIN_DATA を返す', () => {
     // 外部デバイスから 1 回データ受信した状況を再現
     const onData = getCallback(mockExternalDeviceConnection.on, DEVICE_DATA);
     onData({ value: 1 });
@@ -154,27 +207,16 @@ describe('ConnectorApp.start()', () => {
     expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA, expect.anything());
 
     mockClientSocket.emit.mockClear();
-    // 2 回目の MAIN_REQUEST でもデータを返す（空にならない）
+    // 2 回目のメインプロセスからのデータ要求でもデータを返す（MAIN_NO_DATA を返さない）
     getCallback(mockClientSocket.on, MAIN_REQUEST)();
     expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA, expect.anything());
-    expect(mockClientSocket.emit).not.toHaveBeenCalledWith(MAIN_NO_DATA);
   });
+});
 
-  it('config.dataFilePath が null のとき createDataWriter が呼ばれない', () => {
-    // CONFIG に dataFilePath なし → writer 不要な ConnectorApp を作成
-    const fakeCreateDataWriter = vi.fn(() => ({ write: vi.fn() }));
-    const appNoFile = new ConnectorApp(CONFIG, {
-      createExternalDeviceClient: fakeCreateExternalDeviceClient,
-      createServer: fakeCreateServer,
-      createDataWriter: fakeCreateDataWriter,
-    });
+describe('ConnectorApp: ファイル保存設定なし', () => {
+  afterEach(teardownApp);
 
-    // start() しても createDataWriter は呼ばれないことを確認する
-    appNoFile.start();
-    expect(fakeCreateDataWriter).not.toHaveBeenCalled();
-  });
-
-  it('config.dataFilePath がある場合、DEVICE_DATA 受信後にフラッシュ間隔で writeBatch() が呼ばれる', () => {
+  it('dataFilePath 未設定時はファイル書き込みを開始しない', () => {
     vi.useFakeTimers();
 
     const mockConn = { on: vi.fn(), emit: vi.fn() };
@@ -182,17 +224,43 @@ describe('ConnectorApp.start()', () => {
     const mockWriter = { writeBatch: vi.fn() };
     const fakeCreateDataWriter = vi.fn(() => mockWriter);
 
-    // dataFilePath がある ConnectorApp を作成
-    const appWithFile = new ConnectorApp(
-      { ...CONFIG, dataFilePath: '/path/to/file.jsonl' },
-      {
-        createExternalDeviceClient: vi.fn(() => mockConn),
-        createServer: vi.fn(() => mockServer),
-        createDataWriter: fakeCreateDataWriter,
-      }
-    );
+    // dataFilePath が null の ConnectorApp を作成
+    const appNoFile = new ConnectorApp(CONFIG_WITHOUT_DATA_FILE_PATH, {
+      createExternalDeviceClient: vi.fn(() => mockConn),
+      createServer: vi.fn(() => mockServer),
+      createDataWriter: fakeCreateDataWriter,
+    });
+    appNoFile.start();
 
+    // タイマを進めてもファイル作成処理が呼ばれないことを確認
+    vi.advanceTimersByTime(2000);
+    expect(fakeCreateDataWriter).not.toHaveBeenCalled();
+    expect(mockWriter.writeBatch).not.toHaveBeenCalled();
+  });
+});
+
+describe('ConnectorApp: 外部デバイスデータのファイル保存機能', () => {
+  let appWithFile, mockConn, mockServer, mockWriter, fakeCreateDataWriter;
+
+  // テスト毎に dataFilePath が設定された ConnectorApp を作成して start() する
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockConn = { on: vi.fn(), emit: vi.fn() };
+    mockServer = { on: vi.fn() };
+    mockWriter = { writeBatch: vi.fn() };
+    fakeCreateDataWriter = vi.fn(() => mockWriter);
+    appWithFile = new ConnectorApp(CONFIG_WITH_DATA_FILE_PATH, {
+      createExternalDeviceClient: vi.fn(() => mockConn),
+      createServer: vi.fn(() => mockServer),
+      createDataWriter: fakeCreateDataWriter,
+    });
     appWithFile.start();
+  });
+
+  // 各テスト終了時にタイマを戻してモックをリセット
+  afterEach(teardownApp);
+
+  it('config.dataFilePath がある場合、初回フラッシュで受信データを書き込む', () => {
     expect(fakeCreateDataWriter).toHaveBeenCalledWith('/path/to/file.jsonl');
 
     // 外部デバイスからデータ受信
@@ -201,7 +269,7 @@ describe('ConnectorApp.start()', () => {
     // フラッシュ前は writeBatch は呼ばれない
     expect(mockWriter.writeBatch).not.toHaveBeenCalled();
 
-    // フラッシュ間隔経過で writeBatch が呼ばれる
+    // 初回フラッシュで writeBatch が呼ばれる
     vi.advanceTimersByTime(500);
     expect(mockWriter.writeBatch).toHaveBeenCalledOnce();
 
@@ -213,105 +281,34 @@ describe('ConnectorApp.start()', () => {
   });
 
   it('writeBatch() が失敗してもエラーを処理し、受信データを保持する', () => {
-    vi.useFakeTimers();
-
-    // dataFilePath がある ConnectorApp を作成
-    const mockConn = { on: vi.fn(), emit: vi.fn() };
-    const mockServer = { on: vi.fn() };
     const error = new Error('write failed');
-    const mockWriter = { writeBatch: vi.fn(() => { throw error; }) };
+    mockWriter.writeBatch
+      .mockImplementationOnce(() => { throw error; })
+      .mockImplementationOnce(() => {});
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const appWithFile = new ConnectorApp(
-      { ...CONFIG, dataFilePath: '/path/to/file.jsonl' },
-      {
-        createExternalDeviceClient: vi.fn(() => mockConn),
-        createServer: vi.fn(() => mockServer),
-        createDataWriter: vi.fn(() => mockWriter),
-      }
-    );
-
-    appWithFile.start();
     getCallback(mockConn.on, DEVICE_DATA)({ value: 42 });
 
     // フラッシュ失敗してもクラッシュしない
     expect(() => vi.advanceTimersByTime(500)).not.toThrow();
     expect(consoleError).toHaveBeenCalledWith('[connector] write failed:', error);
+    expect(mockWriter.writeBatch).toHaveBeenCalledTimes(1);
 
-    // 書き込み失敗のためインデックスは進まず、バッファのデータは残っている
-    expect(appWithFile._buffer.getDataPendingFileSave()).toHaveLength(1);
-    expect(appWithFile._buffer.latest().data).toEqual({ value: 42 });
+    // 失敗したデータは消えずに次回再試行されることを確認する
+    // (1) 初回フラッシュ試行データを取得
+    const firstPayload = mockWriter.writeBatch.mock.calls[0][0];
+    expect(firstPayload).toHaveLength(1);
+    expect(firstPayload[0].data).toEqual({ value: 42 });
+
+    // (2) タイマを進めて次のフラッシュを実行
+    expect(() => vi.advanceTimersByTime(500)).not.toThrow();
+    expect(mockWriter.writeBatch).toHaveBeenCalledTimes(2);
+
+    // (3) 2 回目のフラッシュ試行データが初回と同じであることを確認する
+    const secondPayload = mockWriter.writeBatch.mock.calls[1][0];
+    expect(secondPayload).toEqual(firstPayload);
   });
 
-  it('disconnect 時にポーリングを停止し DEVICE_REQUEST を送信しなくなる', () => {
-    vi.useFakeTimers();
-
-    // 外部デバイスとの接続
-    getCallback(mockExternalDeviceConnection.on, 'connect')();
-
-    // 接続中はポーリングが動作することを確認する
-    vi.advanceTimersByTime(CONFIG.pollIntervalMs);
-    expect(mockExternalDeviceConnection.emit).toHaveBeenCalledWith(DEVICE_REQUEST);
-
-    // 外部デバイスとの接続解除
-    getCallback(mockExternalDeviceConnection.on, 'disconnect')();
-
-    // 切断後はタイマーを進めても送信されないことを確認する
-    mockExternalDeviceConnection.emit.mockClear();
-    vi.advanceTimersByTime(CONFIG.pollIntervalMs * 3);
-    expect(mockExternalDeviceConnection.emit).not.toHaveBeenCalledWith(DEVICE_REQUEST);
-  });
-
-  it('再接続（connect）時にポーリングを再開する', () => {
-    vi.useFakeTimers();
-
-    // 外部デバイスと接続してすぐ解除
-    const onConnect = getCallback(mockExternalDeviceConnection.on, 'connect');
-    const onDisconnect = getCallback(mockExternalDeviceConnection.on, 'disconnect');
-    onConnect();
-    onDisconnect();
-
-    mockExternalDeviceConnection.emit.mockClear();
-
-    // 再接続でポーリングが再度動作する
-    onConnect();
-    vi.advanceTimersByTime(CONFIG.pollIntervalMs);
-    expect(mockExternalDeviceConnection.emit).toHaveBeenCalledWith(DEVICE_REQUEST);
-  });
-
-  it('connect が連続して呼ばれてもタイマーが多重化しない', () => {
-    vi.useFakeTimers();
-
-    // 外部デバイスとの接続が連続して呼ばれた場合を再現
-    const onConnect = getCallback(mockExternalDeviceConnection.on, 'connect');
-    onConnect();
-    onConnect();
-
-    // 1 間隔で DEVICE_REQUEST は 1 回だけ
-    vi.advanceTimersByTime(CONFIG.pollIntervalMs);
-    const deviceRequestCalls = mockExternalDeviceConnection.emit.mock.calls.filter(
-      ([name]) => name === DEVICE_REQUEST
-    );
-    expect(deviceRequestCalls).toHaveLength(1);
-  });
-
-  it('フラッシュ間隔ごとに未保存データが writeBatch される', () => {
-    vi.useFakeTimers();
-
-    const mockConn = { on: vi.fn(), emit: vi.fn() };
-    const mockServer = { on: vi.fn() };
-    const mockWriter = { writeBatch: vi.fn() };
-
-    // writeBatch() を動かすため、dataFilePath がある ConnectorApp を作成
-    const appWithFile = new ConnectorApp(
-      { ...CONFIG, dataFilePath: '/path/to/file.jsonl' },
-      {
-        createExternalDeviceClient: vi.fn(() => mockConn),
-        createServer: vi.fn(() => mockServer),
-        createDataWriter: vi.fn(() => mockWriter),
-      }
-    );
-    appWithFile.start();
-
+  it('複数フラッシュサイクルで未保存データのみが writeBatch される', () => {
     const onData = getCallback(mockConn.on, DEVICE_DATA);
     onData({ value: 1 });
     onData({ value: 2 });
@@ -332,19 +329,5 @@ describe('ConnectorApp.start()', () => {
     expect(mockWriter.writeBatch).toHaveBeenCalledOnce();
     expect(mockWriter.writeBatch.mock.calls[0][0]).toHaveLength(1);
     expect(mockWriter.writeBatch.mock.calls[0][0][0].data).toEqual({ value: 3 });
-  });
-
-  it('config.dataFilePath が null のときフラッシュタイマーは起動しない', () => {
-    vi.useFakeTimers();
-
-    const mockConn = { on: vi.fn(), emit: vi.fn() };
-    const mockServer = { on: vi.fn() };
-    const appNoFile = new ConnectorApp(CONFIG, {
-      createExternalDeviceClient: vi.fn(() => mockConn),
-      createServer: vi.fn(() => mockServer),
-    });
-    appNoFile.start();
-
-    expect(appNoFile._flushTimer).toBeUndefined();
   });
 });

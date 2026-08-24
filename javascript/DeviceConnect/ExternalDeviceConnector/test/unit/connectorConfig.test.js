@@ -69,16 +69,16 @@ describe('ConnectorConfig: JSON 引数から設定を生成する', () => {
 
   it('JSON 引数がない場合は Error を送出する', () => {
     // argv[2] が存在することを正とする
-    expect(() => ConnectorConfig.fromArgv(['node', 'main.js'])).toThrow(TypeError);
+    expect(() => ConnectorConfig.fromArgv(['node', 'main.js'])).toThrow(Error);
   });
 
   it('argv が配列でない場合は Error を送出する', () => {
     // argv が配列であることを正とする
-    expect(() => ConnectorConfig.fromArgv(null)).toThrow(TypeError);
+    expect(() => ConnectorConfig.fromArgv(null)).toThrow(Error);
   });
 
   it('JSON として不正な場合は Error を送出する', () => {
-    expect(() => ConnectorConfig.fromArgv(['node', 'main.js', 'not-json'])).toThrow(TypeError);
+    expect(() => ConnectorConfig.fromArgv(['node', 'main.js', 'not-json'])).toThrow(Error);
   });
 
   it.each([

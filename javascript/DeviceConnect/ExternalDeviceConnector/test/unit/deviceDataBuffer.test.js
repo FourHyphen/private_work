@@ -1,19 +1,19 @@
 const { DeviceDataBuffer, MAX_BUFFER_SIZE } = require('../../deviceDataBuffer');
 
 describe('DeviceDataBuffer', () => {
-  it('空キューで latest() が null を返す', () => {
+  it('データがない場合は最新データなしを返す', () => {
     const buffer = new DeviceDataBuffer();
-    expect(buffer.latest()).toBeNull();
+    expect(buffer.latest()).toBeNull();    // 空データでなく null を返す仕様
   });
 
-  it('latest() はキューを消費しない', () => {
+  it('最新データを取得してもデータは保持される', () => {
     const buffer = new DeviceDataBuffer();
     buffer.update({ value: 42 });
     buffer.latest();
     expect(buffer.latest()).not.toBeNull();
   });
 
-  it('update(data) でキューに入れるデータは { data, updatedAt(Date 型) } である', () => {
+  it('追加したデータは値と更新時刻を持つ', () => {
     const buffer = new DeviceDataBuffer();
     buffer.update({ value: 42 });
 
@@ -22,7 +22,7 @@ describe('DeviceDataBuffer', () => {
     expect(result.updatedAt).toBeInstanceOf(Date);
   });
 
-  it('複数件ある場合に最後の 1 件を返す', () => {
+  it('複数のデータから最新のものを返す', () => {
     const buffer = new DeviceDataBuffer();
     buffer.update({ value: 1 });
     buffer.update({ value: 2 });
@@ -32,7 +32,7 @@ describe('DeviceDataBuffer', () => {
     expect(result.data).toEqual({ value: 3 });
   });
 
-  it('MAX_BUFFER_SIZE 超過時に最古を削除して最新を追加する（FIFO）', () => {
+  it('容量を超えて追加すると最古のデータを破棄して最新データを保持する', () => {
     const buffer = new DeviceDataBuffer();
 
     // バッファを満杯にする
@@ -43,8 +43,8 @@ describe('DeviceDataBuffer', () => {
     // 超過分
     buffer.update({ value: MAX_BUFFER_SIZE });
 
-    // バッファ件数が MAX_BUFFER_SIZE を超過していないことを確認
-    expect(buffer._queue.length).toBe(MAX_BUFFER_SIZE);
+    // 未保存データの件数が MAX_BUFFER_SIZE を超過していないことを確認
+    expect(buffer.getDataPendingFileSave()).toHaveLength(MAX_BUFFER_SIZE);
 
     // 最新のデータ期待値は FIFO なので MAX_BUFFER_SIZE
     const result = buffer.latest();
@@ -53,12 +53,12 @@ describe('DeviceDataBuffer', () => {
 });
 
 describe('DeviceDataBuffer.getDataPendingFileSave()', () => {
-  it('空バッファで空配列を返す', () => {
+  it('未保存データがない場合は空配列を返す', () => {
     const buffer = new DeviceDataBuffer();
     expect(buffer.getDataPendingFileSave()).toEqual([]);
   });
 
-  it('追加された全データを返す', () => {
+  it('未保存データを追加順に返す', () => {
     const buffer = new DeviceDataBuffer();
     buffer.update({ value: 1 });
     buffer.update({ value: 2 });
@@ -68,14 +68,16 @@ describe('DeviceDataBuffer.getDataPendingFileSave()', () => {
     expect(pending[1].data).toEqual({ value: 2 });
   });
 
-  it('返したデータは次回呼び出しでも再度返される（消費されない）', () => {
+  it('未保存データを取得してもデータは保持される', () => {
+    // 仕様: ファイル保存前ならバッファは削除されない
     const buffer = new DeviceDataBuffer();
     buffer.update({ value: 1 });
     expect(buffer.getDataPendingFileSave()).toHaveLength(1);
     expect(buffer.getDataPendingFileSave()).toHaveLength(1);
   });
 
-  it('latest() の返す値に影響しない', () => {
+  it('未保存データを取得しても最新データを取得できる', () => {
+    // 仕様: ファイル保存前ならバッファは削除されない
     const buffer = new DeviceDataBuffer();
     buffer.update({ value: 1 });
     buffer.update({ value: 2 });
@@ -83,7 +85,7 @@ describe('DeviceDataBuffer.getDataPendingFileSave()', () => {
     expect(buffer.latest().data).toEqual({ value: 2 });
   });
 
-  it('MAX_BUFFER_SIZE 超過で最古が溢れても pending は残存するデータを返す', () => {
+  it('容量超過時は破棄されなかった未保存データを返す', () => {
     const buffer = new DeviceDataBuffer();
 
     // バッファ満杯まで格納
@@ -107,7 +109,7 @@ describe('DeviceDataBuffer.getDataPendingFileSave()', () => {
 });
 
 describe('DeviceDataBuffer.markFileSaved()', () => {
-  it('count 分だけ _fileSaveIndex が進む', () => {
+  it('保存済みとして記録したデータは未保存データに含まれない', () => {
     const buffer = new DeviceDataBuffer();
     buffer.update({ value: 1 });
     buffer.update({ value: 2 });
@@ -115,14 +117,22 @@ describe('DeviceDataBuffer.markFileSaved()', () => {
     expect(buffer.getDataPendingFileSave()).toHaveLength(0);
   });
 
-  it('count が queue 長を超えても _fileSaveIndex は queue 長に留まる', () => {
+  it('追加済み件数を超えて保存済みにしてもデータを壊さない', () => {
     const buffer = new DeviceDataBuffer();
     buffer.update({ value: 1 });
+
+    // 予期しない件数を設定
     buffer.markFileSaved(999);
-    expect(buffer._fileSaveIndex).toBe(1);
+
+    // 全件保存済み扱いとなることを確認
+    expect(buffer.getDataPendingFileSave()).toEqual([]);
+
+    // その後に追加したデータは正しく未保存となっていることを確認
+    buffer.update({ value: 2 });
+    expect(buffer.getDataPendingFileSave()).toHaveLength(1);
   });
 
-  it('markFileSaved 後に追加したデータは再び pending に現れる', () => {
+  it('保存済みとして記録した後に追加したデータは未保存として返す', () => {
     const buffer = new DeviceDataBuffer();
     buffer.update({ value: 1 });
     buffer.markFileSaved(1);
@@ -132,7 +142,7 @@ describe('DeviceDataBuffer.markFileSaved()', () => {
     expect(pending[0].data).toEqual({ value: 2 });
   });
 
-  it('latest() に影響しない', () => {
+  it('保存済みとして記録しても最新データを取得できる', () => {
     const buffer = new DeviceDataBuffer();
     buffer.update({ value: 1 });
     buffer.update({ value: 2 });
@@ -140,7 +150,7 @@ describe('DeviceDataBuffer.markFileSaved()', () => {
     expect(buffer.latest().data).toEqual({ value: 2 });
   });
 
-  it('MAX_BUFFER_SIZE 超過で先頭が溢れると _fileSaveIndex が補正される', () => {
+  it('保存済みデータが容量超過で破棄されても新規データを未保存として返す', () => {
     const buffer = new DeviceDataBuffer();
     for (let i = 0; i < MAX_BUFFER_SIZE; i++) {
       buffer.update({ value: i });
@@ -149,7 +159,9 @@ describe('DeviceDataBuffer.markFileSaved()', () => {
     buffer.markFileSaved(MAX_BUFFER_SIZE);
     buffer.update({ value: MAX_BUFFER_SIZE });
 
-    // 溢れた分だけ _fileSaveIndex が補正されて超過しないこと
-    expect(buffer._fileSaveIndex).toBe(MAX_BUFFER_SIZE - 1);
+    // 保存済みデータが溢れても、新規データは未保存として取得できること
+    const pending = buffer.getDataPendingFileSave();
+    expect(pending).toHaveLength(1);
+    expect(pending[0].data).toEqual({ value: MAX_BUFFER_SIZE });
   });
 });

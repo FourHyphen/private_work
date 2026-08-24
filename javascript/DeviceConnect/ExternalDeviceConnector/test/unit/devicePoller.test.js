@@ -6,7 +6,7 @@ describe('DevicePoller', () => {
     vi.useRealTimers();
   });
 
-  it('start(emitFn) 後、intervalMs 経過ごとに emitFn が呼ばれる', () => {
+  it('開始すると指定した間隔ごとにコールバックが呼ばれる', () => {
     vi.useFakeTimers();
 
     // ポーリング開始
@@ -23,7 +23,7 @@ describe('DevicePoller', () => {
     expect(emitFn).toHaveBeenCalledTimes(2);
   });
 
-  it('stop() 後はタイマーを進めても emitFn が呼ばれない', () => {
+  it('停止するとコールバックが呼ばれなくなる', () => {
     vi.useFakeTimers();
 
     // ポーリング開始
@@ -33,14 +33,13 @@ describe('DevicePoller', () => {
 
     // ポーリング終了
     poller.stop();
-    emitFn.mockClear();
 
-    // ポーリング終了後は interval 経過しても処理が呼ばれないことを確認
-    vi.advanceTimersByTime(500 * 3);
+    // ポーリング終了後は interval 以上に経過しても処理が呼ばれないことを確認
+    vi.advanceTimersByTime(1500);
     expect(emitFn).not.toHaveBeenCalled();
   });
 
-  it('start() -> stop() -> start() の再開でポーリングが再度動作する', () => {
+  it('停止後に再開するとポーリングが再開する', () => {
     vi.useFakeTimers();
 
     // ポーリング開始 -> 停止 -> 再度開始
@@ -56,7 +55,7 @@ describe('DevicePoller', () => {
     expect(emitFn).toHaveBeenCalledTimes(1);
   });
 
-  it('start() を連続で呼んでもタイマーが多重化しない', () => {
+  it('開始中に再度開始してもコールバックの呼び出しが重複しない', () => {
     vi.useFakeTimers();
 
     // ポーリング開始処理を複数回実行

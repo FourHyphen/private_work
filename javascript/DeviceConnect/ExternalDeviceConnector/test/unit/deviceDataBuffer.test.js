@@ -146,22 +146,20 @@ describe('DeviceDataBuffer.markFileSaved()', () => {
     const buffer = new DeviceDataBuffer();
     buffer.update({ value: 1 });
     buffer.update({ value: 2 });
+    buffer.update({ value: 3 });
     buffer.markFileSaved(2);
-    expect(buffer.latest().data).toEqual({ value: 2 });
+    expect(buffer.latest().data).toEqual({ value: 3 });
   });
 
-  it('保存済みデータが容量超過で破棄されても新規データを未保存として返す', () => {
+  it('保存済みとして記録した分のデータはバッファから削除される', () => {
     const buffer = new DeviceDataBuffer();
+    // 境界値検査: バッファ満杯時を検証
     for (let i = 0; i < MAX_BUFFER_SIZE; i++) {
       buffer.update({ value: i });
     }
-    // 全件保存済みにしてからバッファ超過させる
     buffer.markFileSaved(MAX_BUFFER_SIZE);
-    buffer.update({ value: MAX_BUFFER_SIZE });
 
-    // 保存済みデータが溢れても、新規データは未保存として取得できること
-    const pending = buffer.getDataPendingFileSave();
-    expect(pending).toHaveLength(1);
-    expect(pending[0].data).toEqual({ value: MAX_BUFFER_SIZE });
+    // 全件保存済みなら空が返ることをもってバッファ削除を確認
+    expect(buffer.latest()).toBeNull();
   });
 });

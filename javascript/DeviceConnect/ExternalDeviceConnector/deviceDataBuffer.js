@@ -29,9 +29,11 @@ class DeviceDataBuffer {
     return this._queue.slice(this._fileSaveIndex);
   }
 
-  // バッファデータのうちファイル保存済み件数を記録する
+  // バッファデータのうちファイル保存済み件数を記録し、記録したデータをバッファから削除する
   markFileSaved(count) {
     this._fileSaveIndex = Math.min(this._fileSaveIndex + count, this._queue.length);
+    this._queue.splice(0, this._fileSaveIndex);
+    this._fileSaveIndex = 0;
   }
 
   // キューを消費せず最新 1 件を返す。キューが空なら null を返す。

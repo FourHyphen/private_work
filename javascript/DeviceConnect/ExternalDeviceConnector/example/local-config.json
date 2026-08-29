@@ -3,8 +3,8 @@
   "mainPort": 9002,
   "pollIntervalMs": 3000,
   "saveFile": {
-    "dataFilePath": ".\\device_data.txt",
-    "rotationKb": 10,
-    "maxSaveFileNum": 5
+    "dataFilePath": ".\\device_data.log",
+    "rotationKb": 1,
+    "maxSaveFileNum": 3
   }
 }

@@ -4,7 +4,18 @@ const path = require('path');
 const { io: clientIo } = require('socket.io-client');
 const { MAIN_REQUEST, MAIN_DATA, MAIN_NO_DATA } = require('../events');
 
-const connectorConfig = { deviceUrl: 'http://localhost:9001', mainPort: 9002, pollIntervalMs: 3000 };
+// ファイルにローテーション保存する設定
+// ファイル保存しない場合は saveFile ブロックをまるごと削除すること
+const connectorConfig = {
+  deviceUrl: 'http://localhost:9001',
+  mainPort: 9002,
+  pollIntervalMs: 3000,
+  saveFile: {
+    dataFilePath: path.join(__dirname, 'device_data.log'),
+    rotationKb: 1,
+    maxSaveFileNum: 3
+  }
+};
 const CONNECTOR_URL = `http://localhost:${connectorConfig.mainPort}`;
 
 // 外部デバイス(ダミー)をサブプロセスとして起動

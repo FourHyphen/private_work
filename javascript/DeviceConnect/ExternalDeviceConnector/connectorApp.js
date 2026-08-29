@@ -8,7 +8,8 @@ const {
   MAIN_DATA,
   MAIN_NO_DATA
 } = require('./events');
-const { DeviceDataBuffer } = require('./deviceDataBuffer');
+const { LatestDeviceDataCache } = require('./latestDeviceDataCache');
+const { PendingFileSaveQueue } = require('./pendingFileSaveQueue');
 const { DeviceDataWriter } = require('./deviceDataWriter');
 const { DevicePoller } = require('./devicePoller');
 
@@ -29,7 +30,8 @@ class ConnectorApp {
     this._createServer = createServer;
     this.externalDeviceConnection = null;
     this.server = null;
-    this._buffer = new DeviceDataBuffer();    // 外部デバイスから受信したデータを蓄積するキュー
+    this._latestCache = new LatestDeviceDataCache();           // main:request へ即時返却する最新 1 件を管理
+    this._pendingQueue = new PendingFileSaveQueue();           // ファイル未保存データのキュー
     this._poller = new DevicePoller(config.pollIntervalMs);    // 外部デバイスへのポーリング
     this._writer = config.saveFile ? createDataWriter(config.saveFile) : null;
     this._isFlushing = false;    // ファイル書き込み処理が重複実行されないよう制御
@@ -50,10 +52,13 @@ class ConnectorApp {
       this._poller.stop();
     });
 
-    // 外部デバイスからのデータ受け取り: バッファへ格納する
+    // 外部デバイスからのデータ受け取り: 最新キャッシュを更新し、保存対象なら保存待ちキューへも追加する
     this.externalDeviceConnection.on(DEVICE_DATA, (data) => {
       console.log(`[connector] received: ${JSON.stringify(data)}`);
-      this._buffer.update(data);
+      this._latestCache.update(data);
+      if (this._writer) {
+        this._pendingQueue.add(data);
+      }
     });
 
     // メインプロセスとの接続を受ける準備
@@ -68,17 +73,17 @@ class ConnectorApp {
     this.server.on('connection', (socket) => {
       console.log('[connector] main process connected');
 
-      // メインプロセスからの要求にはバッファの最新 1 件を即時返却する
+      // メインプロセスからの要求には最新キャッシュを即時返却する
       socket.on(MAIN_REQUEST, () => {
-        const item = this._buffer.latest();
+        const item = this._latestCache.latest();
 
-        // バッファが空の場合はデータなしイベントを返却
+        // 最新キャッシュが空の場合はデータなしイベントを返却
         if (item === null) {
           socket.emit(MAIN_NO_DATA);
           return;
         }
 
-        // バッファにデータがある場合は最新データを返却
+        // 最新キャッシュがある場合はそのデータを返却
         socket.emit(MAIN_DATA, { data: item.data, updatedAt: item.updatedAt.toISOString() });
       });
     });
@@ -86,24 +91,25 @@ class ConnectorApp {
     console.log(`[connector] listening for main process on ${this.config.mainPort}`);
   }
 
-  // バッファのファイル未保存データをまとめてファイルへ書き込み、成功分をバッファに通知する
+  // 保存待ちキューの未保存データをまとめてファイルへ書き込み、成功分をキューから削除する
   async _flushPending() {
     // 前回の書き込み処理がまだ終わっていない場合はスキップ(同一データの多重書き込みを防止)
     if (this._isFlushing) {
       return;
     }
 
-    const pending = this._buffer.getDataPendingFileSave();
+    // 未保存データを取得
+    const pending = this._pendingQueue.pending();
     if (pending.length === 0) return;
 
     try {
       this._isFlushing = true;
 
       // 処理失敗すると Promise は rejected となる、await は rejected となった Promise を受け取ると例外 throw する
-      await this._writer.writeBatch(pending);        // 書き込み
-      this._buffer.markFileSaved(pending.length);    // 書き込み成功データ件数をバッファに通知
+      await this._writer.writeBatch(pending);          // 書き込み
+      this._pendingQueue.markSaved(pending.length);    // 書き込み開始時点の件数だけキューから削除
     } catch (err) {
-      // 書き込み失敗時は書き込み成功データ件数を増やさない
+      // 書き込み失敗時は書き込み成功データ件数を増やさないことで次回処理時にリトライする
       console.error('[connector] write failed:', err);
     } finally {
       this._isFlushing = false;

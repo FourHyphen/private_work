@@ -358,4 +358,40 @@ describe('ConnectorApp: 外部デバイスデータのファイル保存機能',
     await vi.advanceTimersByTimeAsync(500);
     expect(mockWriter.writeBatch).not.toHaveBeenCalled();
   });
+
+  it('書き込み中に受信した新データは、MAIN_REQUEST へ即時反映され、書き込み完了後も欠落・重複なく再試行される', async () => {
+    // writeBatch の完了を手動制御できる Promise を用意
+    let resolveWrite;
+    mockWriter.writeBatch.mockImplementationOnce(
+      () => new Promise(resolve => { resolveWrite = resolve; })
+    );
+
+    getCallback(mockConn.on, DEVICE_DATA)({ value: 1 });
+
+    // 1 回目フラッシュを発火（writeBatch は未完了のまま pending）
+    vi.advanceTimersByTime(500);
+    expect(mockWriter.writeBatch).toHaveBeenCalledTimes(1);
+
+    // 書き込み中に新しいデータを受信する
+    getCallback(mockConn.on, DEVICE_DATA)({ value: 2 });
+
+    // 書き込み中でも MAIN_REQUEST には最新キャッシュ（value: 2）が即時反映される
+    const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
+    getCallback(mockServer.on, 'connection')(mockClientSocket);
+    getCallback(mockClientSocket.on, MAIN_REQUEST)();
+    const call = mockClientSocket.emit.mock.calls.find(([name]) => name === MAIN_DATA);
+    expect(call[1].data).toEqual({ value: 2 });
+
+    // 進行中の書き込みを完了させる（開始時点の 1 件分のみ保存済みとして扱われる）
+    resolveWrite();
+    await Promise.resolve();
+
+    // 次のフラッシュでは、書き込み中に追加された未保存データ（value: 2）だけが再送される
+    mockWriter.writeBatch.mockClear();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(mockWriter.writeBatch).toHaveBeenCalledOnce();
+    const secondPayload = mockWriter.writeBatch.mock.calls[0][0];
+    expect(secondPayload).toHaveLength(1);
+    expect(secondPayload[0].data).toEqual({ value: 2 });
+  });
 });

@@ -32,6 +32,7 @@ class ConnectorApp {
     this._buffer = new DeviceDataBuffer();    // 外部デバイスから受信したデータを蓄積するキュー
     this._poller = new DevicePoller(config.pollIntervalMs);    // 外部デバイスへのポーリング
     this._writer = config.dataFilePath ? createDataWriter(config.dataFilePath) : null;
+    this._isFlushing = false;    // ファイル書き込み処理が重複実行されないよう制御
   }
 
   start() {
@@ -86,16 +87,26 @@ class ConnectorApp {
   }
 
   // バッファのファイル未保存データをまとめてファイルへ書き込み、成功分をバッファに通知する
-  _flushPending() {
+  async _flushPending() {
+    // 前回の書き込み処理がまだ終わっていない場合はスキップ(同一データの多重書き込みを防止)
+    if (this._isFlushing) {
+      return;
+    }
+
     const pending = this._buffer.getDataPendingFileSave();
     if (pending.length === 0) return;
 
     try {
-      this._writer.writeBatch(pending);              // 書き込み
+      this._isFlushing = true;
+
+      // 処理失敗すると Promise は rejected となる、await は rejected となった Promise を受け取ると例外 throw する
+      await this._writer.writeBatch(pending);        // 書き込み
       this._buffer.markFileSaved(pending.length);    // 書き込み成功データ件数をバッファに通知
     } catch (err) {
       // 書き込み失敗時は書き込み成功データ件数を増やさない
       console.error('[connector] write failed:', err);
+    } finally {
+      this._isFlushing = false;
     }
   }
 }

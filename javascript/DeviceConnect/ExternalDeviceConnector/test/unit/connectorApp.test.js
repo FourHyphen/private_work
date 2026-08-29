@@ -308,26 +308,50 @@ describe('ConnectorApp: 外部デバイスデータのファイル保存機能',
     expect(secondPayload).toEqual(firstPayload);
   });
 
-  it('複数フラッシュサイクルで未保存データのみが writeBatch される', () => {
+  it('複数フラッシュサイクルで未保存データのみが writeBatch される', async () => {
     const onData = getCallback(mockConn.on, DEVICE_DATA);
     onData({ value: 1 });
     onData({ value: 2 });
 
     // 1 回目のフラッシュで 2 件まとめて書き込まれる
-    vi.advanceTimersByTime(500);
+    await vi.advanceTimersByTimeAsync(500);    // タイマー処理で発生した Promise の継続処理も実行する
     expect(mockWriter.writeBatch).toHaveBeenCalledOnce();
     expect(mockWriter.writeBatch.mock.calls[0][0]).toHaveLength(2);
 
     // 2 回目のフラッシュでは pending がないため writeBatch は呼ばれない
     mockWriter.writeBatch.mockClear();
-    vi.advanceTimersByTime(500);
+    await vi.advanceTimersByTimeAsync(500);
     expect(mockWriter.writeBatch).not.toHaveBeenCalled();
 
     // 新規データ追加後の 3 回目フラッシュの場合は 1 件のみ書き込まれる
     onData({ value: 3 });
-    vi.advanceTimersByTime(500);
+    await vi.advanceTimersByTimeAsync(500);
     expect(mockWriter.writeBatch).toHaveBeenCalledOnce();
     expect(mockWriter.writeBatch.mock.calls[0][0]).toHaveLength(1);
     expect(mockWriter.writeBatch.mock.calls[0][0][0].data).toEqual({ value: 3 });
+  });
+
+  it('writeBatch() が完了するまで次のフラッシュをスキップし、完了後は保存済みデータを再送しない', async () => {
+    // writeBatch の完了を手動制御できる Promise を用意
+    let resolveWrite;
+    mockWriter.writeBatch.mockImplementationOnce(
+      () => new Promise(resolve => { resolveWrite = resolve; })
+    );
+
+    getCallback(mockConn.on, DEVICE_DATA)({ value: 1 });
+
+    // 1 回目フラッシュを発火（writeBatch は未完了のまま pending）
+    vi.advanceTimersByTime(500);
+    expect(mockWriter.writeBatch).toHaveBeenCalledTimes(1);
+
+    // writeBatch 未完了中に 2 回目フラッシュインターバルが来ても呼ばれない
+    vi.advanceTimersByTime(500);
+    expect(mockWriter.writeBatch).toHaveBeenCalledTimes(1);
+
+    // writeBatch を完了させ、その後は pending データなし → 次フラッシュで呼ばれない
+    resolveWrite();
+    mockWriter.writeBatch.mockClear();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(mockWriter.writeBatch).not.toHaveBeenCalled();
   });
 });

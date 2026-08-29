@@ -85,6 +85,31 @@ node main.js (Get-Content .\example\local-config.json -Raw)
 }
 ```
 
+# データ保存ファイル
+`config` の `saveFile` が定義されている場合、外部デバイスデータをファイルに保存する
+
+## ローテーション
+- ローテーション処理を実行した日時を `yyyyMMdd_HHmmss` 形式でファイル名に追加する。
+- 1 秒立たずにローテーションする場合はファイル名重複しないよう連番対処
+  - data_20260829_153000_1.log, data_20260829_153000_2.log ...
+  - 連番は 1 から始める
+
+例: `dataFilePath = "./log.txt"`, `maxSaveFileNum = 5` の場合
+
+```
+log.txt -> 最新データ
+log_20260829_130000.txt -> 次ローテーションする場合、このファイルが消える
+log_20260829_133000.txt
+log_20260829_133000_1.txt
+log_20260829_143000.txt -> ローテーションファイルの中では最新ファイル
+```
+
+例: `dataFilePath = "./log.txt"`, `maxSaveFileNum = 1` の場合
+
+```
+log.txt -> 最新データ。このファイルのサイズがしきい値を超えた場合、このファイルを削除して新規に log.txt を作成する
+```
+
 # 概要図
 ポートは外部デバイス=9001、Connector=9002 の想定（起動時 JSON 引数の `deviceUrl` / `mainPort` で変更可、ポーリング間隔は `pollIntervalMs`）
 

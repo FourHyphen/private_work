@@ -2,13 +2,15 @@ const fs = require('fs');
 const path = require('path');
 
 class DeviceDataWriter {
-  constructor(filePath) {
-    this._filePath = filePath;
+  constructor(saveFile) {
+    this._filePath = saveFile.dataFilePath;
+    this._rotationBytes = saveFile.rotationKb * 1024;
+    this._maxSaveFileNum = saveFile.maxSaveFileNum;
     this._writeQueue = Promise.resolve(); // 書き込み処理直列化: Promise の then によるチェーンをキューとして扱う
 
     // ファイル保存先ディレクトリが存在しない場合は作成する
     // TODO: 失敗時は複数回リトライし、それでも失敗するならファイルシステムに問題ありとして最上位に例外送出する
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.mkdirSync(path.dirname(this._filePath), { recursive: true });
   }
 
   // 複数件まとめてファイルに書き込み。前の書き込みが完了してから開始することで順序を保証する
@@ -25,12 +27,16 @@ class DeviceDataWriter {
 
     // 非同期なので書き込み順序を保証。1 つ前の書き込みが完了してから次の書き込みを行う
     // then で呼び出しをチェーンする(Promise が fulfilled になると then のコールバックが呼ばれる)
-    const writePromise = this._writeQueue.then(() => fs.promises.appendFile(this._filePath, line));
+    const writePromise = this._writeQueue.then(() => this._writeCore(line));
 
     // 失敗しても次の書き込みがキューで詰まらないよう、キュー自体は常に fulfilled に保つ
     // (Promise が rejected になると catch のコールバックが呼ばれる)
     this._writeQueue = writePromise.catch(() => {});
     await writePromise;
+  }
+
+  async _writeCore(line) {
+    await fs.promises.appendFile(this._filePath, line);
   }
 }
 

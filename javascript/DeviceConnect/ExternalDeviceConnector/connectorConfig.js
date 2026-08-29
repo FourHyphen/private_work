@@ -1,6 +1,8 @@
+const { ConfigSaveFile } = require('./configSaveFile');
+
 // 入力データを検証し、使用可能な形で格納する
 class ConnectorConfig {
-  constructor({ deviceUrl, mainPort, pollIntervalMs, dataFilePath }) {
+  constructor({ deviceUrl, mainPort, pollIntervalMs, saveFile }) {
     if (typeof deviceUrl !== 'string') {
       throw new TypeError('[connector] invalid config: deviceUrl must be a string');
     }
@@ -13,17 +15,29 @@ class ConnectorConfig {
       throw new TypeError('[connector] invalid config: pollIntervalMs must be a positive integer');
     }
 
-    // dataFilePath は省略可能
-    if (dataFilePath !== undefined && dataFilePath !== null) {
-      if (typeof dataFilePath !== 'string' || dataFilePath === '') {
+    // saveFile は省略可能
+    this._saveFile = null;
+    if (saveFile !== undefined && saveFile !== null) {
+      if (typeof saveFile.dataFilePath !== 'string' || saveFile.dataFilePath === '') {
         throw new TypeError('[connector] invalid config: dataFilePath must be a non-empty string');
       }
+
+      if (!Number.isInteger(saveFile.rotationKb) || saveFile.rotationKb <= 0) {
+        throw new TypeError('[connector] invalid config: rotationKb must be a positive integer');
+      }
+
+      if (!Number.isInteger(saveFile.maxSaveFileNum) || saveFile.maxSaveFileNum <= 0) {
+        throw new TypeError('[connector] invalid config: maxSaveFileNum must be a positive integer');
+      }
+
+      // saveFile に問題なければインスタンス化
+      this._saveFile = new ConfigSaveFile(saveFile.dataFilePath, saveFile.rotationKb, saveFile.maxSaveFileNum);
+      Object.freeze(this._saveFile);
     }
 
     this._deviceUrl = deviceUrl;
     this._mainPort = mainPort;
     this._pollIntervalMs = pollIntervalMs;
-    this._dataFilePath = (dataFilePath != null) ? dataFilePath : null;
 
     Object.freeze(this);
   }
@@ -61,8 +75,8 @@ class ConnectorConfig {
     return this._pollIntervalMs;
   }
 
-  get dataFilePath() {
-    return this._dataFilePath;
+  get saveFile() {
+    return this._saveFile;
   }
 }
 

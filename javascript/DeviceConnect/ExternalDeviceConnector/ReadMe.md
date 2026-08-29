@@ -64,6 +64,26 @@ node main.js (Get-Content .\example\local-config.json -Raw)
 | `deviceUrl` | string | 必須 | 外部デバイスの socket.io URL |
 | `mainPort` | number | 必須 | メインプロセスと通信するポート番号（正の整数） |
 | `pollIntervalMs` | number | 必須 | 外部デバイスへのポーリング間隔（ms、正の整数） |
+| `saveFile` | ※1 | 任意 | 外部デバイスデータをファイルに保存する場合の必須パラメーター |
+
+※1: `saveFile` は以下要素を持つオブジェクト
+
+| キー | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `dataFilePath` | string | 必須 | 外部デバイスデータ保存先ファイルパス |
+| `rotationKb` | number | 必須 | ファイルローテーション基準サイズ(KB) |
+| `maxSaveFileNum` | number | 必須 | 保存するファイル最大数 |
+
+ファイルに保存する場合の最大サイズ = `rotationKb * maxSaveFileNum (KB)`
+
+`saveFile` 例: 
+```json
+"saveFile": {
+  "dataFilePath": ".\\data_file.txt",
+  "rotationKb": 1000,
+  "maxSaveFileNum": 5
+}
+```
 
 # 概要図
 ポートは外部デバイス=9001、Connector=9002 の想定（起動時 JSON 引数の `deviceUrl` / `mainPort` で変更可、ポーリング間隔は `pollIntervalMs`）

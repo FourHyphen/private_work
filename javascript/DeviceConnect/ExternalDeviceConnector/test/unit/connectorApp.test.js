@@ -8,15 +8,19 @@ function getCallback(mockFn, eventName) {
   return call ? call[1] : undefined;
 }
 
-const CONFIG_WITHOUT_DATA_FILE_PATH = {
-    deviceUrl: 'http://localhost:3001',
-    mainPort: 4000,
-    pollIntervalMs: 500
+const CONFIG_WITHOUT_SAVE_FILE = {
+  deviceUrl: 'http://localhost:3001',
+  mainPort: 4000,
+  pollIntervalMs: 500
 };
 
-const CONFIG_WITH_DATA_FILE_PATH = {
-  ...CONFIG_WITHOUT_DATA_FILE_PATH,
-  dataFilePath: '/path/to/file.jsonl'
+const CONFIG_WITH_SAVE_FILE = {
+  ...CONFIG_WITHOUT_SAVE_FILE,
+  saveFile: {
+    dataFilePath: '/path/to/file.jsonl',
+    rotationKb: 1024,
+    maxSaveFileNum: 5
+  }
 };
 
 // トップ階層の describe 間で共有する状態と、その初期化/後始末処理
@@ -34,7 +38,7 @@ function setupApp() {
   fakeCreateServer = vi.fn(() => mockMainServer);
 
   // テスト用のダミーオブジェクトを作成して ConnectorApp を開始
-  app = new ConnectorApp(CONFIG_WITHOUT_DATA_FILE_PATH, {
+  app = new ConnectorApp(CONFIG_WITHOUT_SAVE_FILE, {
     createExternalDeviceClient: fakeCreateExternalDeviceClient,
     createServer: fakeCreateServer,
   });
@@ -51,11 +55,11 @@ describe('ConnectorApp: 初期化', () => {
   afterEach(teardownApp);
 
   it('指定した deviceUrl に接続する', () => {
-    expect(fakeCreateExternalDeviceClient).toHaveBeenCalledWith(CONFIG_WITHOUT_DATA_FILE_PATH.deviceUrl);
+    expect(fakeCreateExternalDeviceClient).toHaveBeenCalledWith(CONFIG_WITHOUT_SAVE_FILE.deviceUrl);
   });
 
   it('指定した mainPort を使用して Server を起動する', () => {
-    expect(fakeCreateServer).toHaveBeenCalledWith(CONFIG_WITHOUT_DATA_FILE_PATH.mainPort);
+    expect(fakeCreateServer).toHaveBeenCalledWith(CONFIG_WITHOUT_SAVE_FILE.mainPort);
   });
 });
 
@@ -70,11 +74,11 @@ describe('ConnectorApp: デバイスポーリング制御', () => {
     getCallback(mockExternalDeviceConnection.on, 'connect')();
 
     // pollIntervalMs 経過ごとに DEVICE_REQUEST が emit される
-    vi.advanceTimersByTime(CONFIG_WITHOUT_DATA_FILE_PATH.pollIntervalMs);
+    vi.advanceTimersByTime(CONFIG_WITHOUT_SAVE_FILE.pollIntervalMs);
     expect(mockExternalDeviceConnection.emit).toHaveBeenCalledWith(DEVICE_REQUEST);
 
     mockExternalDeviceConnection.emit.mockClear();    // 初回タイマ進行の履歴を空にして次のタイマ処理検証に影響しないようにする
-    vi.advanceTimersByTime(CONFIG_WITHOUT_DATA_FILE_PATH.pollIntervalMs);
+    vi.advanceTimersByTime(CONFIG_WITHOUT_SAVE_FILE.pollIntervalMs);
     expect(mockExternalDeviceConnection.emit).toHaveBeenCalledWith(DEVICE_REQUEST);
   });
 
@@ -85,7 +89,7 @@ describe('ConnectorApp: デバイスポーリング制御', () => {
     getCallback(mockExternalDeviceConnection.on, 'connect')();
 
     // 接続中はポーリングが動作することを確認する
-    vi.advanceTimersByTime(CONFIG_WITHOUT_DATA_FILE_PATH.pollIntervalMs);
+    vi.advanceTimersByTime(CONFIG_WITHOUT_SAVE_FILE.pollIntervalMs);
     expect(mockExternalDeviceConnection.emit).toHaveBeenCalledWith(DEVICE_REQUEST);
 
     // 外部デバイスとの接続解除
@@ -93,7 +97,7 @@ describe('ConnectorApp: デバイスポーリング制御', () => {
 
     // 切断後はタイマーを進めても送信されないことを確認する
     mockExternalDeviceConnection.emit.mockClear();
-    vi.advanceTimersByTime(CONFIG_WITHOUT_DATA_FILE_PATH.pollIntervalMs * 3);
+    vi.advanceTimersByTime(CONFIG_WITHOUT_SAVE_FILE.pollIntervalMs * 3);
     expect(mockExternalDeviceConnection.emit).not.toHaveBeenCalledWith(DEVICE_REQUEST);
   });
 
@@ -110,7 +114,7 @@ describe('ConnectorApp: デバイスポーリング制御', () => {
 
     // 再接続でポーリングが再度動作する
     onConnect();
-    vi.advanceTimersByTime(CONFIG_WITHOUT_DATA_FILE_PATH.pollIntervalMs);
+    vi.advanceTimersByTime(CONFIG_WITHOUT_SAVE_FILE.pollIntervalMs);
     expect(mockExternalDeviceConnection.emit).toHaveBeenCalledWith(DEVICE_REQUEST);
   });
 
@@ -123,7 +127,7 @@ describe('ConnectorApp: デバイスポーリング制御', () => {
     onConnect();
 
     // 1 間隔で DEVICE_REQUEST は 1 回だけ
-    vi.advanceTimersByTime(CONFIG_WITHOUT_DATA_FILE_PATH.pollIntervalMs);
+    vi.advanceTimersByTime(CONFIG_WITHOUT_SAVE_FILE.pollIntervalMs);
     const deviceRequestCalls = mockExternalDeviceConnection.emit.mock.calls.filter(
       ([name]) => name === DEVICE_REQUEST
     );
@@ -216,7 +220,7 @@ describe('ConnectorApp: メインプロセスへのデータ応答', () => {
 describe('ConnectorApp: ファイル保存設定なし', () => {
   afterEach(teardownApp);
 
-  it('dataFilePath 未設定時はファイル書き込みを開始しない', () => {
+  it('saveFile 未定義時はファイル書き込みを開始しない', () => {
     vi.useFakeTimers();
 
     const mockConn = { on: vi.fn(), emit: vi.fn() };
@@ -224,8 +228,8 @@ describe('ConnectorApp: ファイル保存設定なし', () => {
     const mockWriter = { writeBatch: vi.fn() };
     const fakeCreateDataWriter = vi.fn(() => mockWriter);
 
-    // dataFilePath が null の ConnectorApp を作成
-    const appNoFile = new ConnectorApp(CONFIG_WITHOUT_DATA_FILE_PATH, {
+    // saveFile が未定義の ConnectorApp を作成
+    const appNoFile = new ConnectorApp(CONFIG_WITHOUT_SAVE_FILE, {
       createExternalDeviceClient: vi.fn(() => mockConn),
       createServer: vi.fn(() => mockServer),
       createDataWriter: fakeCreateDataWriter,
@@ -242,14 +246,14 @@ describe('ConnectorApp: ファイル保存設定なし', () => {
 describe('ConnectorApp: 外部デバイスデータのファイル保存機能', () => {
   let appWithFile, mockConn, mockServer, mockWriter, fakeCreateDataWriter;
 
-  // テスト毎に dataFilePath が設定された ConnectorApp を作成して start() する
+  // テスト毎に saveFile が設定された ConnectorApp を作成して start() する
   beforeEach(() => {
     vi.useFakeTimers();
     mockConn = { on: vi.fn(), emit: vi.fn() };
     mockServer = { on: vi.fn() };
     mockWriter = { writeBatch: vi.fn() };
     fakeCreateDataWriter = vi.fn(() => mockWriter);
-    appWithFile = new ConnectorApp(CONFIG_WITH_DATA_FILE_PATH, {
+    appWithFile = new ConnectorApp(CONFIG_WITH_SAVE_FILE, {
       createExternalDeviceClient: vi.fn(() => mockConn),
       createServer: vi.fn(() => mockServer),
       createDataWriter: fakeCreateDataWriter,
@@ -260,8 +264,8 @@ describe('ConnectorApp: 外部デバイスデータのファイル保存機能',
   // 各テスト終了時にタイマを戻してモックをリセット
   afterEach(teardownApp);
 
-  it('config.dataFilePath がある場合、初回フラッシュで受信データを書き込む', () => {
-    expect(fakeCreateDataWriter).toHaveBeenCalledWith('/path/to/file.jsonl');
+  it('config.saveFile がある場合、初回フラッシュで受信データを書き込む', () => {
+    expect(fakeCreateDataWriter).toHaveBeenCalledWith(CONFIG_WITH_SAVE_FILE.saveFile);
 
     // 外部デバイスからデータ受信
     getCallback(mockConn.on, DEVICE_DATA)({ value: 42 });

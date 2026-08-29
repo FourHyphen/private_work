@@ -21,7 +21,7 @@ class ConnectorApp {
     {
       createExternalDeviceClient = clientIo,
       createServer = (port) => new Server(port),
-      createDataWriter = (filePath) => new DeviceDataWriter(filePath)
+      createDataWriter = (saveFile) => new DeviceDataWriter(saveFile),
     } = {}
   ) {
     this.config = config;
@@ -31,7 +31,7 @@ class ConnectorApp {
     this.server = null;
     this._buffer = new DeviceDataBuffer();    // 外部デバイスから受信したデータを蓄積するキュー
     this._poller = new DevicePoller(config.pollIntervalMs);    // 外部デバイスへのポーリング
-    this._writer = config.dataFilePath ? createDataWriter(config.dataFilePath) : null;
+    this._writer = config.saveFile ? createDataWriter(config.saveFile) : null;
     this._isFlushing = false;    // ファイル書き込み処理が重複実行されないよう制御
   }
 

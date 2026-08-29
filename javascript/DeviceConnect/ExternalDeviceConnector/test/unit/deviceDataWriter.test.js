@@ -3,6 +3,12 @@ const os = require('os');
 const path = require('path');
 const { DeviceDataWriter } = require('../../deviceDataWriter');
 
+const SAVE_FILE = {
+  dataFilePath: '',    // どのファイルでテストするかを明確化するため、DeviceDataWriter インスタンス生成時に指定する
+  rotationKb: 1024,
+  maxSaveFileNum: 5
+}
+
 describe('DeviceDataWriter', () => {
   let tempDir;
   const readRecords = filePath => fs.readFileSync(filePath, 'utf8')
@@ -20,7 +26,7 @@ describe('DeviceDataWriter', () => {
 
   it('存在しない保存先ディレクトリでもディレクトリが作成される', () => {
     const filePath = path.join(tempDir, 'nested', 'data.jsonl');
-    new DeviceDataWriter(filePath);
+    new DeviceDataWriter({ ...SAVE_FILE, dataFilePath: filePath });
     expect(fs.existsSync(path.dirname(filePath))).toBe(true);
   });
 
@@ -30,7 +36,7 @@ describe('DeviceDataWriter', () => {
     fs.writeFileSync(filePath, '{"data":{"value":0},"updatedAt":"2026-08-22T09:59:59.000Z"}\n');
 
     // 追記
-    const writer = new DeviceDataWriter(filePath);
+    const writer = new DeviceDataWriter({ ...SAVE_FILE, dataFilePath: filePath });
     const items = [
       { data: { value: 1 }, updatedAt: new Date('2026-08-22T10:00:00.000Z') },
       { data: { value: 2 }, updatedAt: new Date('2026-08-22T10:00:00.100Z') },
@@ -52,7 +58,7 @@ describe('DeviceDataWriter', () => {
     fs.writeFileSync(filePath, initialContent);
 
     // 空データで書き込み実行
-    const writer = new DeviceDataWriter(filePath);
+    const writer = new DeviceDataWriter({ ...SAVE_FILE, dataFilePath: filePath });
     await writer.writeBatch([]);
 
     // 既存ファイルの中身に変更がないことを確認
@@ -61,7 +67,7 @@ describe('DeviceDataWriter', () => {
 
   it('await せずに複数の writeBatch を呼んでも呼び出し順にファイルへ書き込む', async () => {
     const filePath = path.join(tempDir, 'data.jsonl');
-    const writer = new DeviceDataWriter(filePath);
+    const writer = new DeviceDataWriter({ ...SAVE_FILE, dataFilePath: filePath });
 
     // await せずに並行呼び出し
     const p1 = writer.writeBatch([{ data: { seq: 1 }, updatedAt: new Date('2026-08-22T10:00:00.000Z') }]);

@@ -68,11 +68,38 @@ describe('MainRequestServer: メインプロセスへのデータ応答', () => 
     const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
     getCallback(mockServer.on, 'connection')(mockClientSocket);
 
-    // メインプロセスからのデータ要求
+    // 起動直後を想定: DEVICE_DATA 未受信でメインプロセスからの要求が来た場合、MAIN_NO_DATA を返す
     getCallback(mockClientSocket.on, MAIN_REQUEST)();
 
     // emit() 呼び出し履歴のうち MAIN_NO_DATA 呼び出し情報を取得
     const call = mockClientSocket.emit.mock.calls.find(([name]) => name === MAIN_NO_DATA);
     expect(call).toBeDefined();
+  });
+
+  it('同一データに対する連続 MAIN_REQUEST で毎回 MAIN_DATA を返す', () => {
+    const mockServer = { on: vi.fn() };
+    const fakeCreateServer = vi.fn(() => mockServer);
+    const latestCache = new LatestDeviceDataCache();
+
+    // 外部デバイスから 1 回データ受信した状況を再現
+    latestCache.update({ value: 1 });
+
+    const server = new MainRequestServer(MAIN_PORT, { createServer: fakeCreateServer }, latestCache);
+    server.start();
+
+    // メインプロセスとの接続環境を再現
+    const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
+    getCallback(mockServer.on, 'connection')(mockClientSocket);
+
+    // メインプロセスからのデータ要求
+    getCallback(mockClientSocket.on, MAIN_REQUEST)();
+
+    // 外部デバイスデータありの応答が返ったことを確認
+    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA, expect.anything());
+
+    mockClientSocket.emit.mockClear();
+    // 2 回目のメインプロセスからのデータ要求でもデータを返す（MAIN_NO_DATA を返さない）
+    getCallback(mockClientSocket.on, MAIN_REQUEST)();
+    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA, expect.anything());
   });
 });

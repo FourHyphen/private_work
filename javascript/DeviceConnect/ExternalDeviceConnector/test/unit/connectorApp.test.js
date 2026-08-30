@@ -91,58 +91,7 @@ describe('ConnectorApp: メインプロセスへのデータ応答', () => {
     expect(typeof payload.updatedAt).toBe('string');
     expect(new Date(payload.updatedAt).toISOString()).toBe(payload.updatedAt);
   });
-
-  it('MAIN_REQUEST 受信時にバッファが空なら MAIN_NO_DATA を返す', () => {
-    // メインプロセスとの接続環境を再現
-    const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
-    getCallback(mockMainServer.on, 'connection')(mockClientSocket);
-
-    // メインプロセスからのデータ要求
-    getCallback(mockClientSocket.on, MAIN_REQUEST)();
-
-    // 起動直後を想定: DEVICE_DATA 未受信でメインプロセスからの要求が来た場合、MAIN_NO_DATA を返す
-    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_NO_DATA);
-    expect(mockClientSocket.emit).not.toHaveBeenCalledWith(MAIN_DATA, expect.anything());
-  });
-
-  it('複数回 DEVICE_DATA を受信しても最新 1 件のみを返す', () => {
-    // 外部デバイスから 2 回データ受信した状況を再現
-    const onData = getCallback(mockExternalDeviceConnection.on, DEVICE_DATA);
-    onData({ value: 1 });
-    onData({ value: 2 });
-
-    // メインプロセスとの接続環境を再現
-    const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
-    getCallback(mockMainServer.on, 'connection')(mockClientSocket);
-
-    // メインプロセスからのデータ要求
-    getCallback(mockClientSocket.on, MAIN_REQUEST)();
-
-    // emit() 呼び出し履歴のうち最初の MAIN_DATA 呼び出し情報を取得
-    const call = mockClientSocket.emit.mock.calls.find(([name]) => name === MAIN_DATA);
-    expect(call[1].data).toEqual({ value: 2 });    // call[1] = emit() の第 2 引数 = 送信された payload
-  });
-
-  it('同一データに対する連続 MAIN_REQUEST で毎回 MAIN_DATA を返す', () => {
-    // 外部デバイスから 1 回データ受信した状況を再現
-    const onData = getCallback(mockExternalDeviceConnection.on, DEVICE_DATA);
-    onData({ value: 1 });
-
-    // メインプロセスとの接続環境を再現
-    const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
-    getCallback(mockMainServer.on, 'connection')(mockClientSocket);
-
-    // メインプロセスからのデータ要求
-    getCallback(mockClientSocket.on, MAIN_REQUEST)();
-
-    // 外部デバイスデータありの応答が返ったことを確認
-    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA, expect.anything());
-
-    mockClientSocket.emit.mockClear();
-    // 2 回目のメインプロセスからのデータ要求でもデータを返す（MAIN_NO_DATA を返さない）
-    getCallback(mockClientSocket.on, MAIN_REQUEST)();
-    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA, expect.anything());
-  });
+  // MAIN_NO_DATA・複数件受信時の挙動・連続リクエストの詳細は mainRequestServer.test.js / latestDeviceDataCache.test.js に移設
 });
 
 describe('ConnectorApp: ファイル保存設定なし', () => {
@@ -172,6 +121,7 @@ describe('ConnectorApp: ファイル保存設定なし', () => {
 });
 
 describe('ConnectorApp: 外部デバイスデータのファイル保存機能', () => {
+  // 保存失敗時のリトライ・複数フラッシュサイクル・多重実行防止の詳細は deviceDataSaveScheduler.test.js を参照
   let appWithFile, mockConn, mockServer, mockWriter, fakeCreateDataWriter;
 
   // テスト毎に saveFile が設定された ConnectorApp を作成して start() する
@@ -210,81 +160,6 @@ describe('ConnectorApp: 外部デバイスデータのファイル保存機能',
     expect(written).toHaveLength(1);
     expect(written[0].data).toEqual({ value: 42 });
     expect(written[0].updatedAt).toBeInstanceOf(Date);
-  });
-
-  it('writeBatch() が失敗してもエラーを処理し、受信データを保持する', () => {
-    const error = new Error('write failed');
-    mockWriter.writeBatch
-      .mockImplementationOnce(() => { throw error; })
-      .mockImplementationOnce(() => {});
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    getCallback(mockConn.on, DEVICE_DATA)({ value: 42 });
-
-    // フラッシュ失敗してもクラッシュしない
-    expect(() => vi.advanceTimersByTime(500)).not.toThrow();
-    expect(consoleError).toHaveBeenCalledWith('[connector] write failed:', error);
-    expect(mockWriter.writeBatch).toHaveBeenCalledTimes(1);
-
-    // 失敗したデータは消えずに次回再試行されることを確認する
-    // (1) 初回フラッシュ試行データを取得
-    const firstPayload = mockWriter.writeBatch.mock.calls[0][0];
-    expect(firstPayload).toHaveLength(1);
-    expect(firstPayload[0].data).toEqual({ value: 42 });
-
-    // (2) タイマを進めて次のフラッシュを実行
-    expect(() => vi.advanceTimersByTime(500)).not.toThrow();
-    expect(mockWriter.writeBatch).toHaveBeenCalledTimes(2);
-
-    // (3) 2 回目のフラッシュ試行データが初回と同じであることを確認する
-    const secondPayload = mockWriter.writeBatch.mock.calls[1][0];
-    expect(secondPayload).toEqual(firstPayload);
-  });
-
-  it('複数フラッシュサイクルで未保存データのみが writeBatch される', async () => {
-    const onData = getCallback(mockConn.on, DEVICE_DATA);
-    onData({ value: 1 });
-    onData({ value: 2 });
-
-    // 1 回目のフラッシュで 2 件まとめて書き込まれる
-    await vi.advanceTimersByTimeAsync(500);    // タイマー処理で発生した Promise の継続処理も実行する
-    expect(mockWriter.writeBatch).toHaveBeenCalledOnce();
-    expect(mockWriter.writeBatch.mock.calls[0][0]).toHaveLength(2);
-
-    // 2 回目のフラッシュでは pending がないため writeBatch は呼ばれない
-    mockWriter.writeBatch.mockClear();
-    await vi.advanceTimersByTimeAsync(500);
-    expect(mockWriter.writeBatch).not.toHaveBeenCalled();
-
-    // 新規データ追加後の 3 回目フラッシュの場合は 1 件のみ書き込まれる
-    onData({ value: 3 });
-    await vi.advanceTimersByTimeAsync(500);
-    expect(mockWriter.writeBatch).toHaveBeenCalledOnce();
-    expect(mockWriter.writeBatch.mock.calls[0][0]).toHaveLength(1);
-    expect(mockWriter.writeBatch.mock.calls[0][0][0].data).toEqual({ value: 3 });
-  });
-
-  it('writeBatch() が完了するまで次のフラッシュをスキップし、完了後は保存済みデータを再送しない', async () => {
-    // writeBatch の完了を手動制御できる Promise を用意
-    let resolveWrite;
-    mockWriter.writeBatch.mockImplementationOnce(
-      () => new Promise(resolve => { resolveWrite = resolve; })
-    );
-
-    getCallback(mockConn.on, DEVICE_DATA)({ value: 1 });
-
-    // 1 回目フラッシュを発火（writeBatch は未完了のまま pending）
-    vi.advanceTimersByTime(500);
-    expect(mockWriter.writeBatch).toHaveBeenCalledTimes(1);
-
-    // writeBatch 未完了中に 2 回目フラッシュインターバルが来ても呼ばれない
-    vi.advanceTimersByTime(500);
-    expect(mockWriter.writeBatch).toHaveBeenCalledTimes(1);
-
-    // writeBatch を完了させ、その後は pending データなし → 次フラッシュで呼ばれない
-    resolveWrite();
-    mockWriter.writeBatch.mockClear();
-    await vi.advanceTimersByTimeAsync(500);
-    expect(mockWriter.writeBatch).not.toHaveBeenCalled();
   });
 
   it('書き込み中に受信した新データは、MAIN_REQUEST へ即時反映され、書き込み完了後も欠落・重複なく再試行される', async () => {

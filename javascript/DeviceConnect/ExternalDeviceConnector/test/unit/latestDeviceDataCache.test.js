@@ -18,6 +18,7 @@ describe('LatestDeviceDataCache', () => {
 
   it('複数回追加した場合は最後の項目を返す', () => {
     const cache = new LatestDeviceDataCache();
+    // 外部デバイスから複数回データ受信しても最新 1 件のみを保持する
     cache.update({ value: 1 });
     cache.update({ value: 2 });
     cache.update({ value: 3 });

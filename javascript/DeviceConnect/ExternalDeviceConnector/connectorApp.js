@@ -29,6 +29,15 @@ class ConnectorApp {
   }
 
   start() {
+    // 受信した外部デバイスデータを定期的にファイル保存する(任意)
+    // 開始直後に受信したデータを保存するため、外部デバイス接続開始前にこちらを開始すること
+    if (this.config.saveFile) {
+      this._deviceDataSaveScheduler = new DeviceDataSaveScheduler(
+        this._createDataWriter(this.config.saveFile)
+      );
+      this._deviceDataSaveScheduler.start();
+    }
+
     // メインプロセスに返却する最新データ管理
     this._latestCache = new LatestDeviceDataCache();
 
@@ -42,8 +51,9 @@ class ConnectorApp {
       this._latestCache.update(data);
 
       // 保存スケジューラーのキューに追加してファイル保存されるようにする
+      // (LatestCache 側でのデータ編集内容を取り込むため latest() で取得)
       if (this._deviceDataSaveScheduler) {
-        this._deviceDataSaveScheduler.enqueue(data);
+        this._deviceDataSaveScheduler.enqueue(this._latestCache.latest());
       }
     });
 
@@ -54,18 +64,6 @@ class ConnectorApp {
       createServer: this._createServer,
     }, this._latestCache);
     this._mainRequestServer.start();
-
-    // 受信した外部デバイスデータを定期的にファイル保存する
-    // (ファイル保存は任意のため機能有効の場合のみ)
-    if (this.config.saveFile) {
-      this._deviceDataSaveScheduler = new DeviceDataSaveScheduler(
-        this._createDataWriter(this.config.saveFile)
-      );
-    }
-
-    if (this._deviceDataSaveScheduler) {
-      this._deviceDataSaveScheduler.start();
-    }
   }
 }
 

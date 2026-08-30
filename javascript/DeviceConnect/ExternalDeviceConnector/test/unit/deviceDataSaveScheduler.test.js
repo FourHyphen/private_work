@@ -15,7 +15,7 @@ describe('DeviceDataSaveScheduler', () => {
     const scheduler = new DeviceDataSaveScheduler(writer);
     scheduler.start();
 
-    scheduler.enqueue({ value: 42 });
+    scheduler.enqueue({ data: { value: 42 }, updatedAt: new Date() });
     await vi.advanceTimersByTimeAsync(500);
 
     expect(writer.writeBatch).toHaveBeenCalledTimes(1);
@@ -37,7 +37,7 @@ describe('DeviceDataSaveScheduler', () => {
 
     const scheduler = new DeviceDataSaveScheduler(writer);
     scheduler.start();
-    scheduler.enqueue({ value: 99 });
+    scheduler.enqueue({ data: { value: 99 } });
 
     // 書き込み失敗してもクラッシュしない
     await vi.advanceTimersByTimeAsync(500);
@@ -58,8 +58,8 @@ describe('DeviceDataSaveScheduler', () => {
     const writer = { writeBatch: vi.fn() };
     const scheduler = new DeviceDataSaveScheduler(writer);
     scheduler.start();
-    scheduler.enqueue({ value: 1 });
-    scheduler.enqueue({ value: 2 });
+    scheduler.enqueue({ data: { value: 1 } });
+    scheduler.enqueue({ data: { value: 2 } });
 
     // 1 回目のフラッシュで 2 件まとめて書き込まれる
     await vi.advanceTimersByTimeAsync(500);
@@ -72,7 +72,7 @@ describe('DeviceDataSaveScheduler', () => {
     expect(writer.writeBatch).not.toHaveBeenCalled();
 
     // 新規データ追加後の 3 回目フラッシュの場合は 1 件のみ書き込まれる
-    scheduler.enqueue({ value: 3 });
+    scheduler.enqueue({ data: { value: 3 } });
     await vi.advanceTimersByTimeAsync(500);
     expect(writer.writeBatch).toHaveBeenCalledOnce();
     expect(writer.writeBatch.mock.calls[0][0]).toHaveLength(1);
@@ -89,7 +89,7 @@ describe('DeviceDataSaveScheduler', () => {
 
     const scheduler = new DeviceDataSaveScheduler(writer);
     scheduler.start();
-    scheduler.enqueue({ value: 1 });
+    scheduler.enqueue({ data: { value: 1 } });
 
     // 1 回目フラッシュを発火（writeBatch は未完了のまま pending）
     await vi.advanceTimersByTimeAsync(500);

@@ -10,7 +10,7 @@ class PendingFileSaveQueue {
     if (this._queue.length >= MAX_PENDING_QUEUE_SIZE) {
       this._queue.shift();
     }
-    this._queue.push({ data, updatedAt: new Date() });
+    this._queue.push(data);
   }
 
   // 未保存項目のスナップショットを返す（キューは消費しない）

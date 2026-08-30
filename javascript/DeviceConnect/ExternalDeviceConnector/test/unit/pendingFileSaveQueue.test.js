@@ -3,8 +3,8 @@ const { PendingFileSaveQueue, MAX_PENDING_QUEUE_SIZE } = require('../../pendingF
 describe('PendingFileSaveQueue', () => {
   it('追加順に未保存項目を返す', () => {
     const queue = new PendingFileSaveQueue();
-    queue.add({ value: 1 });
-    queue.add({ value: 2 });
+    queue.add({ data: { value: 1 } });
+    queue.add({ data: { value: 2 } });
 
     const pending = queue.pending();
     expect(pending).toHaveLength(2);
@@ -14,9 +14,9 @@ describe('PendingFileSaveQueue', () => {
 
   it('markSaved(count) は成功件数だけ先頭から削除する', () => {
     const queue = new PendingFileSaveQueue();
-    queue.add({ value: 1 });
-    queue.add({ value: 2 });
-    queue.add({ value: 3 });
+    queue.add({ data: { value: 1 } });
+    queue.add({ data: { value: 2 } });
+    queue.add({ data: { value: 3 } });
 
     queue.markSaved(2);
 
@@ -27,15 +27,15 @@ describe('PendingFileSaveQueue', () => {
 
   it('書き込み中に追加された項目は、進行中バッチの成功後も残る', () => {
     const queue = new PendingFileSaveQueue();
-    queue.add({ value: 1 });
-    queue.add({ value: 2 });
+    queue.add({ data: { value: 1 } });
+    queue.add({ data: { value: 2 } });
 
     // 書き込み開始時点のスナップショットを取得
     const pendingAtFlushStart = queue.pending();
     expect(pendingAtFlushStart).toHaveLength(2);
 
     // 書き込み中に新しいデータが追加される
-    queue.add({ value: 3 });
+    queue.add({ data: { value: 3 } });
 
     // 開始時点で取得した件数だけを保存済みとして削除する
     queue.markSaved(pendingAtFlushStart.length);
@@ -47,13 +47,12 @@ describe('PendingFileSaveQueue', () => {
 
   it('上限超過時は最古の保存待ち項目を破棄する', () => {
     const queue = new PendingFileSaveQueue();
-
     for (let i = 0; i < MAX_PENDING_QUEUE_SIZE; i++) {
-      queue.add({ value: i });
+      queue.add({ data: { value: i } });
     }
 
     // 超過分
-    queue.add({ value: MAX_PENDING_QUEUE_SIZE });
+    queue.add({ data: { value: MAX_PENDING_QUEUE_SIZE } });
 
     const pending = queue.pending();
     expect(pending).toHaveLength(MAX_PENDING_QUEUE_SIZE);

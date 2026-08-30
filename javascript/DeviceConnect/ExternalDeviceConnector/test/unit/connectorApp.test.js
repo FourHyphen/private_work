@@ -54,6 +54,28 @@ describe('ConnectorApp: 初期化', () => {
   beforeEach(setupApp);
   afterEach(teardownApp);
 
+  it('初期化時は依存コンポーネントを生成せず、start() で生成する', () => {
+    const mockConn = { on: vi.fn(), emit: vi.fn() };
+    const mockServer = { on: vi.fn() };
+    const appWithoutStart = new ConnectorApp(CONFIG_WITH_SAVE_FILE, {
+      createExternalDeviceClient: vi.fn(() => mockConn),
+      createServer: vi.fn(() => mockServer),
+      createDataWriter: vi.fn(() => ({ writeBatch: vi.fn() })),
+    });
+
+    expect(appWithoutStart._latestCache).toBeNull();
+    expect(appWithoutStart._deviceConnection).toBeNull();
+    expect(appWithoutStart._mainRequestServer).toBeNull();
+    expect(appWithoutStart._deviceDataSaveScheduler).toBeNull();
+
+    appWithoutStart.start();
+
+    expect(appWithoutStart._latestCache).not.toBeNull();
+    expect(appWithoutStart._deviceConnection).not.toBeNull();
+    expect(appWithoutStart._mainRequestServer).not.toBeNull();
+    expect(appWithoutStart._deviceDataSaveScheduler).not.toBeNull();
+  });
+
   it('指定した deviceUrl に接続する', () => {
     expect(fakeCreateExternalDeviceClient).toHaveBeenCalledWith(CONFIG_WITHOUT_SAVE_FILE.deviceUrl);
   });

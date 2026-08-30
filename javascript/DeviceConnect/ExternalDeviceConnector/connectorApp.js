@@ -2,16 +2,13 @@ const { Server } = require('socket.io');
 const { io: clientIo } = require('socket.io-client');
 const FLUSH_INTERVAL_MS = 500;
 const {
-  DEVICE_REQUEST,
-  DEVICE_DATA,
-  MAIN_REQUEST,
-  MAIN_DATA,
-  MAIN_NO_DATA
+  DEVICE_DATA
 } = require('./events');
 const { LatestDeviceDataCache } = require('./latestDeviceDataCache');
 const { PendingFileSaveQueue } = require('./pendingFileSaveQueue');
 const { DeviceDataWriter } = require('./deviceDataWriter');
 const { ExternalDeviceConnection } = require('./externalDeviceConnection');
+const { MainRequestServer } = require('./mainRequestServer');
 
 class ConnectorApp {
   // コンストラクタ第 2 引数
@@ -29,7 +26,7 @@ class ConnectorApp {
     this._createExternalDeviceClient = createExternalDeviceClient;
     this._createServer = createServer;
     this._deviceConnection = null;
-    this.server = null;
+    this._mainRequestServer = null;
     this._latestCache = new LatestDeviceDataCache();           // main:request へ即時返却する最新 1 件を管理
     this._pendingQueue = new PendingFileSaveQueue();           // ファイル未保存データのキュー
     this._writer = config.saveFile ? createDataWriter(config.saveFile) : null;
@@ -52,34 +49,16 @@ class ConnectorApp {
 
     this._deviceConnection.start();
 
-    // メインプロセスとの接続を受ける準備
-    this.server = this._createServer(this.config.mainPort);
+    // メインプロセスとの接続を受ける
+    this._mainRequestServer = new MainRequestServer(this.config.mainPort, {
+      createServer: this._createServer
+    }, this._latestCache);
+    this._mainRequestServer.start();
 
     // 一定間隔でバッファの未保存データをまとめてファイルへ書き込む
     if (this._writer) {
       this._flushTimer = setInterval(() => this._flushPending(), FLUSH_INTERVAL_MS);
     }
-
-    // メインプロセスからの接続受理時
-    this.server.on('connection', (socket) => {
-      console.log('[connector] main process connected');
-
-      // メインプロセスからの要求には最新キャッシュを即時返却する
-      socket.on(MAIN_REQUEST, () => {
-        const item = this._latestCache.latest();
-
-        // 最新キャッシュが空の場合はデータなしイベントを返却
-        if (item === null) {
-          socket.emit(MAIN_NO_DATA);
-          return;
-        }
-
-        // 最新キャッシュがある場合はそのデータを返却
-        socket.emit(MAIN_DATA, { data: item.data, updatedAt: item.updatedAt.toISOString() });
-      });
-    });
-
-    console.log(`[connector] listening for main process on ${this.config.mainPort}`);
   }
 
   // 保存待ちキューの未保存データをまとめてファイルへ書き込み、成功分をキューから削除する

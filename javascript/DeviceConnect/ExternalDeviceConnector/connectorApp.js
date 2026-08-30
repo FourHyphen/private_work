@@ -11,7 +11,7 @@ const {
 const { LatestDeviceDataCache } = require('./latestDeviceDataCache');
 const { PendingFileSaveQueue } = require('./pendingFileSaveQueue');
 const { DeviceDataWriter } = require('./deviceDataWriter');
-const { DevicePoller } = require('./devicePoller');
+const { ExternalDeviceConnection } = require('./externalDeviceConnection');
 
 class ConnectorApp {
   // コンストラクタ第 2 引数
@@ -28,38 +28,29 @@ class ConnectorApp {
     this.config = config;
     this._createExternalDeviceClient = createExternalDeviceClient;
     this._createServer = createServer;
-    this.externalDeviceConnection = null;
+    this._deviceConnection = null;
     this.server = null;
     this._latestCache = new LatestDeviceDataCache();           // main:request へ即時返却する最新 1 件を管理
     this._pendingQueue = new PendingFileSaveQueue();           // ファイル未保存データのキュー
-    this._poller = new DevicePoller(config.pollIntervalMs);    // 外部デバイスへのポーリング
     this._writer = config.saveFile ? createDataWriter(config.saveFile) : null;
     this._isFlushing = false;    // ファイル書き込み処理が重複実行されないよう制御
   }
 
   start() {
-    this.externalDeviceConnection = this._createExternalDeviceClient(this.config.deviceUrl);
-
-    // 外部デバイスとの接続完了時: ポーリングを開始する
-    this.externalDeviceConnection.on('connect', () => {
-      console.log('[connector] connected to device');
-      this._poller.start(() => this.externalDeviceConnection.emit(DEVICE_REQUEST));
+    // 外部デバイスとの接続を開始し、ポーリングでデータを受け取る
+    // onData コールバックにはキャッシュ更新＆保存キュー登録を設定
+    this._deviceConnection = new ExternalDeviceConnection(this.config, {
+      createExternalDeviceClient: this._createExternalDeviceClient,
     });
 
-    // 外部デバイスとの切断時: ポーリングを停止する
-    this.externalDeviceConnection.on('disconnect', () => {
-      console.log('[connector] disconnected from device');
-      this._poller.stop();
-    });
-
-    // 外部デバイスからのデータ受け取り: 最新キャッシュを更新し、保存対象なら保存待ちキューへも追加する
-    this.externalDeviceConnection.on(DEVICE_DATA, (data) => {
-      console.log(`[connector] received: ${JSON.stringify(data)}`);
+    this._deviceConnection.onData((data) => {
       this._latestCache.update(data);
       if (this._writer) {
         this._pendingQueue.add(data);
       }
     });
+
+    this._deviceConnection.start();
 
     // メインプロセスとの接続を受ける準備
     this.server = this._createServer(this.config.mainPort);

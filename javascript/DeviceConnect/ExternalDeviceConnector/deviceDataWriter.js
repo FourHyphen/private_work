@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
+// 制限: 同時呼び出しに対する書き込み順序を保証しない
+// 本 PJ では DeviceDataSaveScheduler にその役割を移譲した。単体で利用する場合は書き込み順序制御に注意
 class DeviceDataWriter {
   // now はテスト用に現在時刻を固定するためのオプション。デフォルトは現在時刻を返す関数
   constructor(saveFile, { now = () => new Date() } = {}) {
@@ -8,14 +10,13 @@ class DeviceDataWriter {
     this._rotationBytes = saveFile.rotationKb * 1024;
     this._maxSaveFileNum = saveFile.maxSaveFileNum;
     this._now = now;
-    this._writeQueue = Promise.resolve(); // 書き込み処理直列化: Promise の then によるチェーンをキューとして扱う
 
     // ファイル保存先ディレクトリが存在しない場合は作成する
     // TODO: 失敗時は複数回リトライし、それでも失敗するならファイルシステムに問題ありとして最上位に例外送出する
     fs.mkdirSync(path.dirname(this._filePath), { recursive: true });
   }
 
-  // 複数件まとめてファイルに書き込み。前の書き込みが完了してから開始することで順序を保証する
+  // 複数件まとめてファイルに書き込む
   // async をつけたメソッドは必ず Promise を返す
   //  -> このメソッドの戻り値は appendFile の完了を待つ Promise
   //     呼び出し側はこのメソッドを await 付きで実行することで Promise の完了を待てる
@@ -27,42 +28,35 @@ class DeviceDataWriter {
       JSON.stringify({ data: item.data, updatedAt: item.updatedAt.toISOString() })
     ).join('\n') + '\n';
 
-    // 非同期なので書き込み順序を保証。1 つ前の書き込みが完了してから次の書き込みを行う
-    // then で呼び出しをチェーンする(Promise が fulfilled になると then のコールバックが呼ばれる)
-    const writePromise = this._writeQueue.then(() => this._writeCore(line));
-
-    // 失敗しても次の書き込みがキューで詰まらないよう、キュー自体は常に fulfilled に保つ
-    // (Promise が rejected になると catch のコールバックが呼ばれる)
-    this._writeQueue = writePromise.catch(() => {});
-    await writePromise;
+    await this._writeCore(line);
   }
 
+  // 必要に応じてローテーションしてから書き込む
   async _writeCore(line) {
-    // 必要に応じてローテーションする
     if (await this._needRotate()) {
       await this._rotate();
     }
 
-    // 書き込み
     await fs.promises.appendFile(this._filePath, line);
   }
 
+  // ローテーションが必要かをファイルサイズ基準で判断
   async _needRotate() {
-    // ローテーションが必要かをファイルサイズ基準で判断
     try {
       const stat = await fs.promises.stat(this._filePath);
       return (stat.size >= this._rotationBytes);
     } catch (err) {
       // ENOENT = Error NO ENTry = ファイルが存在しない場合のエラーコード
-      if (err.code !== 'ENOENT') {
+      if (err.code === 'ENOENT') {
+        // ファイルが存在しない場合はローテーション不要なのでエラーは潰して問題なし
+        return false;
+      } else {
         throw err;
       }
-
-      // ファイルが存在しない場合はローテーション不要なのでエラーは潰して問題なし
-      return false;
     }
   }
 
+  // ローテーション実行
   async _rotate() {
     const backupFiles = await this._getBackupFilesSorted();
     const dir = path.dirname(this._filePath);
@@ -97,7 +91,7 @@ class DeviceDataWriter {
 
   // data_20260829_153000.log や data_20260829_153000_1.log をリストアップしてソートして返す
   // 存在しない場合は空配列を返す
-  async _getBackupFilesSorted() {    
+  async _getBackupFilesSorted() {
     const dir = path.dirname(this._filePath);
     const ext = path.extname(this._filePath);
     const base = path.basename(this._filePath, ext);

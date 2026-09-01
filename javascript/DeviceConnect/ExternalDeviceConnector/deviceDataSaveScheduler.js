@@ -7,7 +7,7 @@ class DeviceDataSaveScheduler {
     this._queue = new PendingFileSaveQueue();
     this._writer = writer;
     this._flushTimer = null;
-    this._isFlushing = false;    // ファイル書き込み処理が重複実行されないよう制御
+    this._isFlushing = false;    // Scheduler が書き込みの直列化を担い、重複実行を防ぐ
   }
 
   start() {
@@ -26,7 +26,7 @@ class DeviceDataSaveScheduler {
 
   // 保存待ちキューの未保存データをまとめてファイルへ書き込み、成功分をキューから削除する
   async _flushPending() {
-    // 前回の書き込み処理がまだ終わっていない場合はスキップ(同一データの多重書き込みを防止)
+    // 前回の書き込み処理がまだ終わっていない場合はスキップ
     if (this._isFlushing) {
       return;
     }

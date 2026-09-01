@@ -64,23 +64,6 @@ describe('DeviceDataWriter', () => {
     expect(fs.readFileSync(filePath, 'utf8')).toBe(initialContent);
   });
 
-  it('await せずに複数の writeBatch を呼んでも呼び出し順にファイルへ書き込む', async () => {
-    const filePath = path.join(tempDir, 'data.jsonl');
-    const writer = new DeviceDataWriter({ ...SAVE_FILE, dataFilePath: filePath });
-
-    // await せずに並行呼び出し
-    const p1 = writer.writeBatch([{ data: { seq: 1 }, updatedAt: new Date('2026-08-22T10:00:00.000Z') }]);
-    const p2 = writer.writeBatch([{ data: { seq: 2 }, updatedAt: new Date('2026-08-22T10:00:00.100Z') }]);
-    const p3 = writer.writeBatch([{ data: { seq: 3 }, updatedAt: new Date('2026-08-22T10:00:00.200Z') }]);
-    await Promise.all([p1, p2, p3]);
-
-    const records = readRecords(filePath);
-    expect(records).toHaveLength(3);
-    expect(records[0].data.seq).toBe(1);
-    expect(records[1].data.seq).toBe(2);
-    expect(records[2].data.seq).toBe(3);
-  });
-
   describe('ファイルローテーション', () => {
     it('ファイルサイズがしきい値未満の場合はローテーションせず同一ファイルに追記される', async () => {
       const filePath = path.join(tempDir, 'data.jsonl');

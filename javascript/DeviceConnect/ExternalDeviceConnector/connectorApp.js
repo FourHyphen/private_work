@@ -1,3 +1,4 @@
+const http = require('http');
 const { Server } = require('socket.io');
 const { io: clientIo } = require('socket.io-client');
 const { LatestDeviceDataCache } = require('./latestDeviceDataCache');
@@ -8,19 +9,21 @@ const { DeviceDataSaveScheduler } = require('./deviceDataSaveScheduler');
 
 class ConnectorApp {
   // コンストラクタ第 2 引数
-  //  -> createExternalDeviceClient / createServer / createDataWriter テスト時にフェイクファクトリを注入できるようにする
+  //  -> createExternalDeviceClient / createHttpServer / createSocketServer / createDataWriter テスト時にフェイクファクトリを注入できるようにする
   //     省略時は本番想定、デフォルト設定を使用
   constructor(
     config,
     {
       createExternalDeviceClient = clientIo,
-      createServer = (port) => new Server(port),
+      createHttpServer = () => http.createServer(),
+      createSocketServer = (httpServer) => new Server(httpServer),
       createDataWriter = (saveFile) => new DeviceDataWriter(saveFile),
     } = {}
   ) {
     this.config = config;
     this._createExternalDeviceClient = createExternalDeviceClient;
-    this._createServer = createServer;
+    this._createHttpServer = createHttpServer;
+    this._createSocketServer = createSocketServer;
     this._createDataWriter = createDataWriter;
     this._deviceConnection = null;
     this._mainRequestServer = null;
@@ -28,7 +31,19 @@ class ConnectorApp {
     this._deviceDataSaveScheduler = null;
   }
 
-  start() {
+  // mainPort の listener が利用可能になるまで解決しない
+  // listener 起動に失敗した場合は reject し、外部デバイス接続・保存スケジューラーを開始しない
+  async start() {
+    // メインプロセスに返却する最新データ管理
+    this._latestCache = new LatestDeviceDataCache();
+
+    // メインプロセスとの接続を受ける（listener 起動を他の初期化より先に完了させる）
+    this._mainRequestServer = new MainRequestServer(this.config.mainPort, {
+      createHttpServer: this._createHttpServer,
+      createSocketServer: this._createSocketServer,
+    }, this._latestCache);
+    await this._mainRequestServer.start();    // listen 成功を確認してから次に進む(失敗時は例外送出想定)
+
     // 受信した外部デバイスデータを定期的にファイル保存する(任意)
     // 開始直後に受信したデータを保存するため、外部デバイス接続開始前にこちらを開始すること
     if (this.config.saveFile) {
@@ -37,9 +52,6 @@ class ConnectorApp {
       );
       this._deviceDataSaveScheduler.start();
     }
-
-    // メインプロセスに返却する最新データ管理
-    this._latestCache = new LatestDeviceDataCache();
 
     // 外部デバイスとの接続を開始し、ポーリングでデータを受け取る
     // onData コールバックにはキャッシュ更新と保存スケジューラーへのキュー登録を設定
@@ -58,12 +70,6 @@ class ConnectorApp {
     });
 
     this._deviceConnection.start();
-
-    // メインプロセスとの接続を受ける
-    this._mainRequestServer = new MainRequestServer(this.config.mainPort, {
-      createServer: this._createServer,
-    }, this._latestCache);
-    this._mainRequestServer.start();
   }
 }
 

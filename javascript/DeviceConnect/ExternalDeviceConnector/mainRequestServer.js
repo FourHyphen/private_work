@@ -1,3 +1,4 @@
+const http = require('http');
 const { Server } = require('socket.io');
 const {
   MAIN_REQUEST,
@@ -9,17 +10,30 @@ const {
 class MainRequestServer {
   // latestCache: LatestDeviceDataCache のインスタンス
   // options:
-  //   - createServer: (port) => Server のファクトリ関数（テスト時にフェイク注入可能）
-  constructor(mainPort, { createServer = (port) => new Server(port) } = {}, latestCache) {
+  //   - createHttpServer: () => http.Server のファクトリ関数（テスト時にフェイク注入可能）
+  //   - createSocketServer: (httpServer) => Server のファクトリ関数（テスト時にフェイク注入可能）
+  constructor(
+    mainPort,
+    {
+      createHttpServer = () => http.createServer(),
+      createSocketServer = (httpServer) => new Server(httpServer),
+    } = {},
+    latestCache
+  ) {
     this._mainPort = mainPort;
-    this._createServer = createServer;
+    this._createHttpServer = createHttpServer;
+    this._createSocketServer = createSocketServer;
     this._latestCache = latestCache;
+    this._httpServer = null;
     this._server = null;
   }
 
+  // return: 以下を設定した Promise
+  //   resolve: mainPort の listen に成功した時点
+  //   reject : bind/listen 失敗が確定
   start() {
-    // メインプロセスとの接続を受ける準備
-    this._server = this._createServer(this._mainPort);
+    this._httpServer = this._createHttpServer();
+    this._server = this._createSocketServer(this._httpServer);
 
     // メインプロセスからの接続受理時
     this._server.on('connection', (socket) => {
@@ -40,7 +54,53 @@ class MainRequestServer {
       });
     });
 
-    console.log(`[connector] listening for main process on ${this._mainPort}`);
+    return this._listen();
+  }
+
+  _listen() {
+    return new Promise((resolve, reject) => {
+      // listen の成否いずれか先に発生した方だけで完了させるためのフラグ
+      let settled = false;
+
+      const onError = (error) => {
+        // すでに listen 成功して resolve していた場合は何もしない
+        if (settled) {
+          return;
+        }
+        settled = true;
+
+        this._httpServer.off('error', onError);
+
+        // 呼び出し元(main.js)が終了コードとしてそのまま使えるよう kind を付与する
+        const startupError = new Error(
+          `[connector] failed to listen for main process on ${this._mainPort}: ${error.message}`
+        );
+        startupError.kind = 3;
+        startupError.cause = error;
+
+        reject(startupError);
+      };
+
+      // listen 中のエラー発生を一度だけ拾う
+      this._httpServer.once('error', onError);
+
+      try {
+        this._httpServer.listen(this._mainPort, () => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+
+          // 接続成功したらエラー発生を拾う必要なし
+          this._httpServer.off('error', onError);
+          console.log(`[connector] listening for main process on ${this._mainPort}`);
+
+          resolve();
+        });
+      } catch (error) {
+        onError(error);
+      }
+    });
   }
 }
 

@@ -52,8 +52,9 @@ node main.js '{"deviceUrl":"http://192.168.1.10:9001","mainPort":9002,"pollInter
 const { spawn } = require('child_process');
 
 const config = { deviceUrl: 'http://localhost:9001', mainPort: 9002, pollIntervalMs: 3000 };
-const child = spawn('node', ['main.js', JSON.stringify(config)], { stdio: 'inherit' });
+const child = spawn('node', ['main.js', JSON.stringify(config)], { stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
 ```
+`ready` / `startup-error` を IPC で受け取るには `stdio` に `'ipc'` を含める必要がある。
 
 ## デバッグ: 外部デバイスにダミーを使用してデバイスとの接続状態を作成
 ```
@@ -142,70 +143,119 @@ log.txt -> 最新データ。このファイルのサイズがしきい値をお
 ※書き込み後にチェックするためしきい値を超過してからローテーションする
 
 # 異常時
-## 起動時の設定不正
+## メインプロセスからの本プロセス異常の受け取り方
+### 起動成否
+- 要約: IPC を使用する
+- 起動成功した場合
+  - 本プロセスは以下を返す
+    - `process.send({ type: 'ready' });`
+    - `ready` はメインプロセス向け HTTP/socket.io サーバー（`mainPort`）の listener が利用可能になった通知であり、外部デバイスとの接続確立・初回データ受信の完了通知ではない
+      - `main:request` はこの時点から送ってよい。外部デバイス未接続・未受信の場合は `main:nodata` が返る
+- 起動失敗した場合
+  - 本プロセスは以下を実行する
+    - `startup-error` メッセージを送る
+      - `process.send({ type: 'startup-error', kind: error?.kind, reason: String(error?.message ?? error) });`
+    - `process.exit(非0)` を実行し、確実に本プロセスを終了する
+      - 終了コードは `startup-error` メッセージ送信時の `kind` と同一とする
+      - 具体的な終了コードは下記参照(全て T.B.D.)
+- メインプロセスでの受け取り方例: 
+  - ```
+    const child = spawn('node', ['main.js', json], { stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+    const timer = setTimeout(() => child.kill(), 5000); // ready が来ない
+    child.on('message', (msg) => {
+      if (msg.type === 'ready') { clearTimeout(timer); /* 起動成功 */ }
+      if (msg.type === 'startup-error') { clearTimeout(timer); /* msg.reason で分類 */ }
+    });
+    child.on('exit', (code) => { clearTimeout(timer); /* ready/startup-error が届かず終了した場合 */ });
+    ```
+  - 親プロセスは `ready`・`startup-error`・子プロセスの `exit`・タイムアウトのすべてを監視すること
+
+### 実行中の異常
+- T.B.D.
+
+### プロセス終了時の異常
+- T.B.D.
+
+## 本プロセスで想定する異常系
+### 起動時の設定不正
 - argv 欠落 / JSON パース失敗 / 必須パラメータの型・値不正
-- この場合のメインプロセスとの契約は T.B.D.
+- この場合のメインプロセスとの契約
+  - `メインプロセスからの本プロセス異常の受け取り方` の `起動成否` の通りのメッセージと挙動とする
+  - 終了コード: `1`
 
-## データ保存ファイル保存先ディレクトリ作成失敗
-- この場合のメインプロセスとの契約は T.B.D.
+### データ保存ファイル保存先ディレクトリ作成失敗
+- この場合のメインプロセスとの契約
+  - `メインプロセスからの本プロセス異常の受け取り方` の `起動成否` の通りのメッセージと挙動とする
+  - 終了コード: `2`
 
-## メインプロセスとの通信用サーバー起動時のポート競合
+### メインプロセスとの通信用サーバー起動時のポート競合
 - `mainPort` が使用中の場合
-- この場合のメインプロセスとの契約は T.B.D.
+- この場合のメインプロセスとの契約
+  - `メインプロセスからの本プロセス異常の受け取り方` の `起動成否` の通りのメッセージと挙動とする
+  - 終了コード: `3`
 
-## メインプロセスとの通信回復不可
+### メインプロセスとの通信回復不可
 - 一時的な通信不可は `socket.io` により自動的に復旧を試みる
 - 復旧不可の場合、メインプロセスからはデータ要求に対してタイムアウトする
 - この場合はメインプロセスから本プロセスを終了し、再度本プロセスを立ち上げ直すことを推奨する
 
-## 外部デバイスとの通信に一度も成功しない
+### 外部デバイスとの通信に一度も成功しない
+- 外部デバイスと通信はできてもデバイス側が沈黙する場合もここに含む
 - 外部デバイスデータ保存キャッシュが空になるため `main:nodata` が返り続ける
 - この場合は本プロセスと外部デバイスとの通信に継続的な異常があるため、その経路を調査すること
 
-## 外部デバイスからのデータが不正
+### 外部デバイスからのデータが不正
 - 外部デバイスからのデータは一度シリアライズ(JSON 化)されてから届くため、JSON オブジェクト内での循環参照などはないと判断してその辺は未検証とする
 - 受け取った JSON 文字列を JSON インスタンス化に失敗する場合はあり得る
   - undefined や BigInt などの `JSON.stringfy` 想定外の場合
 - 受信データの検証は T.B.D.
   - メインプロセスとの契約も要検討
 
-## 外部デバイスからのデータが巨大
+### 外部デバイスからのデータが巨大
 - 1 レコードが極端に大きい場合
 - 受信データの検証は T.B.D.
   - メインプロセスとの契約も要検討
 
-## 外部デバイスとの通信回復不可
+### 外部デバイスとの通信回復不可
 - 一時的な通信不可は `socket.io` により自動的に復旧を試みる
 - 復旧不可の場合、メインプロセスからは `{ data, updatedAt }` で返ってきた `updatedAt` が以前取得した時点から変化なし
 - この場合は本プロセスと外部デバイスとの通信に継続的な異常があるため、その経路を調査すること
 
-## データ保存ファイルへの書き込み: 最初から失敗する条件を満たしている
+### データ保存ファイルへの書き込み: 最初から失敗する条件を満たしている
 - 書き込み権限不足などの場合
 - この場合のメインプロセスとの契約は T.B.D.
 
-## データ保存ファイルへの書き込み: ハング
+### データ保存ファイルへの書き込み: ハング
 - 内部的には書き込み中フラグの true / false によりポーリング時に書き込み処理を実行するかを決定する
 - 書き込み処理がハングするとフラグが false に戻らないため以降書き込み処理を実行しなくなる
 - この場合の対策やメインプロセスとの契約は T.B.D.
 
-## データ保存ファイルへの書き込み: 一時的な失敗
+### データ保存ファイルへの書き込み: 一時的な失敗
 - 一時的な失敗はポーリングによるリトライで吸収するためメインプロセス側からの対応不要
 
-## データ保存ファイルへの書き込み: 途中から失敗し続ける
+### データ保存ファイルへの書き込み: 途中から失敗し続ける
 - 失敗し続ける場合はキュー上限超過によるキュー溢れの可能性が出る
   - 内部的には 100ms ポーリングの 8h 換算で 288,000 件保持のため運用上の問題はないはず
 - 途中から容量不足になった場合もこうなる
 - この場合の対策やメインプロセスとの契約は T.B.D.
 
-## データ保存ファイルのローテーション失敗
+### データ保存ファイルのローテーション失敗
 - TODO
 
-## プロセスの予期せぬ異常
+### プロセスの予期せぬ異常
 - 現状例外検知なし、プロセスが落ちることになる
 - この場合の対策やメインプロセスとの契約は T.B.D.
 
+### メインプロセス消失による本プロセスの残留
+- この場合は本プロセスが残ってポーリングを続けることになるため以下問題がある
+  - 外部デバイスとの通信ポーリングが残る
+    - データ保存ファイルの容量が増え続けるなど
+  - 何も知らずにメインプロセス再起動すると本プロセスを 2 重に走らせる可能性あり
+    - ポート設定を変えなければポート競合による本プロセス起動失敗となる
+- この場合の対策やメインプロセスとの契約は T.B.D.
 
-# 概要図
+# 図
+## 概要図
 ポートは外部デバイス=9001、Connector=9002 の想定（起動時 JSON 引数の `deviceUrl` / `mainPort` で変更可、ポーリング間隔は `pollIntervalMs`）
 
 ```mermaid
@@ -225,4 +275,31 @@ sequenceDiagram
     MP->>EDC: socket.emit (main:request)
     EDC-->>MP: socket.emit (main:data { data, updatedAt })
     Note left of MP: socket.on で受け取る（バッファが空なら main:nodata）
+```
+
+## 本プロセス起動時
+```mermaid
+sequenceDiagram
+    participant MP as Main Process
+    participant M as main.js
+    participant A as ConnectorApp
+    participant S as MainRequestServer
+    participant H as HTTP Server
+
+    MP->>M: spawn (IPC enabled)
+    M->>A: await app.start()
+    A->>S: await start()
+    S->>H: listen(mainPort)
+    alt listen succeeds
+        H-->>S: listening callback
+        S-->>A: resolve
+        A-->>M: resolve
+        M-->>MP: { type: 'ready' }
+    else listen fails
+        H-->>S: error
+        S-->>A: reject(error)
+        A-->>M: reject(error)
+        M-->>MP: { type: 'startup-error', kind, reason }
+        M->>M: exit(kind)
+    end
 ```

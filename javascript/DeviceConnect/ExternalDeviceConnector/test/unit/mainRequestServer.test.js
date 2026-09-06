@@ -8,36 +8,61 @@ function getCallback(mockFn, eventName) {
   return call ? call[1] : undefined;
 }
 
+// listen callback と error イベントを任意の順序で発火できるフェイク HTTP サーバー
+function createFakeHttpServer() {
+  return {
+    on: vi.fn(),
+    once: vi.fn(),
+    off: vi.fn(),
+    listen: vi.fn(),
+  };
+}
+
 const MAIN_PORT = 4000;
 
 describe('MainRequestServer: 初期化', () => {
-  it('指定した mainPort を使用して Server を起動する', () => {
-    const mockServer = { on: vi.fn() };
-    const fakeCreateServer = vi.fn(() => mockServer);
+  it('error 発火時は start() が kind: 3 のエラーで reject する', async () => {
+    const fakeHttpServer = createFakeHttpServer();
     const latestCache = new LatestDeviceDataCache();
-    const server = new MainRequestServer(MAIN_PORT, { createServer: fakeCreateServer }, latestCache);
+    const server = new MainRequestServer(
+      MAIN_PORT,
+      { createHttpServer: vi.fn(() => fakeHttpServer), createSocketServer: vi.fn(() => ({ on: vi.fn() })) },
+      latestCache
+    );
 
-    server.start();
+    const startPromise = server.start();
+    const onError = getCallback(fakeHttpServer.once, 'error');
+    onError(new Error('EADDRINUSE'));
 
-    expect(fakeCreateServer).toHaveBeenCalledWith(MAIN_PORT);
+    await expect(startPromise).rejects.toMatchObject({ kind: 3 });
   });
 });
 
 describe('MainRequestServer: メインプロセスへのデータ応答', () => {
+  // listen 成功済みの MainRequestServer を作る（connection ハンドラー登録は listen 前に完了している）
+  function startServer(latestCache) {
+    const fakeHttpServer = createFakeHttpServer();
+    const mockSocketServer = { on: vi.fn() };
+    const server = new MainRequestServer(
+      MAIN_PORT,
+      { createHttpServer: vi.fn(() => fakeHttpServer), createSocketServer: vi.fn(() => mockSocketServer) },
+      latestCache
+    );
+    server.start();
+    return { mockSocketServer };
+  }
+
   it('キャッシュにデータがある場合は MAIN_DATA で { data, updatedAt } を返す', () => {
-    const mockServer = { on: vi.fn() };
-    const fakeCreateServer = vi.fn(() => mockServer);
     const latestCache = new LatestDeviceDataCache();
 
     // キャッシュにデータを格納
     latestCache.update({ value: 42 });
 
-    const server = new MainRequestServer(MAIN_PORT, { createServer: fakeCreateServer }, latestCache);
-    server.start();
+    const { mockSocketServer } = startServer(latestCache);
 
     // メインプロセスとの接続を再現
     const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
-    getCallback(mockServer.on, 'connection')(mockClientSocket);
+    getCallback(mockSocketServer.on, 'connection')(mockClientSocket);
 
     // メインプロセスからのデータ要求
     getCallback(mockClientSocket.on, MAIN_REQUEST)();
@@ -57,16 +82,13 @@ describe('MainRequestServer: メインプロセスへのデータ応答', () => 
   });
 
   it('キャッシュが空の場合は MAIN_NO_DATA を返す', () => {
-    const mockServer = { on: vi.fn() };
-    const fakeCreateServer = vi.fn(() => mockServer);
     const latestCache = new LatestDeviceDataCache();
 
-    const server = new MainRequestServer(MAIN_PORT, { createServer: fakeCreateServer }, latestCache);
-    server.start();
+    const { mockSocketServer } = startServer(latestCache);
 
     // メインプロセスとの接続を再現
     const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
-    getCallback(mockServer.on, 'connection')(mockClientSocket);
+    getCallback(mockSocketServer.on, 'connection')(mockClientSocket);
 
     // 起動直後を想定: DEVICE_DATA 未受信でメインプロセスからの要求が来た場合、MAIN_NO_DATA を返す
     getCallback(mockClientSocket.on, MAIN_REQUEST)();
@@ -77,19 +99,16 @@ describe('MainRequestServer: メインプロセスへのデータ応答', () => 
   });
 
   it('同一データに対する連続 MAIN_REQUEST で毎回 MAIN_DATA を返す', () => {
-    const mockServer = { on: vi.fn() };
-    const fakeCreateServer = vi.fn(() => mockServer);
     const latestCache = new LatestDeviceDataCache();
 
     // 外部デバイスから 1 回データ受信した状況を再現
     latestCache.update({ value: 1 });
 
-    const server = new MainRequestServer(MAIN_PORT, { createServer: fakeCreateServer }, latestCache);
-    server.start();
+    const { mockSocketServer } = startServer(latestCache);
 
     // メインプロセスとの接続環境を再現
     const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
-    getCallback(mockServer.on, 'connection')(mockClientSocket);
+    getCallback(mockSocketServer.on, 'connection')(mockClientSocket);
 
     // メインプロセスからのデータ要求
     getCallback(mockClientSocket.on, MAIN_REQUEST)();

@@ -4,14 +4,43 @@
 const { ConnectorConfig } = require('./connectorConfig');
 const { ConnectorApp } = require('./connectorApp');
 
-try {
-  // 入力検証
-  const config = ConnectorConfig.fromArgv(process.argv);
+async function main({
+  connectorConfig = ConnectorConfig,
+  createApp = (config) => new ConnectorApp(config),
+} = {}) {
+  try {
+    // 入力検証
+    const config = connectorConfig.fromArgv(process.argv);
 
-  // 実行開始
-  const app = new ConnectorApp(config);
-  app.start();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
+    // 実行開始（mainPort の listener が利用可能になるまで解決しない）
+    const app = createApp(config);
+    await app.start();
+
+    // IPC を使用してメインプロセスと疎通可能になったことを送信
+    if (process.send) {    // IPC 未使用実行時は false
+      process.send({ type: 'ready' });
+    }
+  } catch (error) {
+    // kind を持たないエラー（設定不正など）は終了コード 1 にフォールバックする
+    const kind = error?.kind ?? 1;
+
+    if (process.send) {
+      process.send({
+        type: 'startup-error',
+        kind,
+        reason: String(error?.message ?? error),
+      });
+    }
+
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(kind);
+  }
 }
+
+// テストなどから読み込んだ場合は main を実行しない
+if (require.main === module) {
+  main();
+}
+
+// テストでの使用を想定
+module.exports = { main };

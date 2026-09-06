@@ -8,6 +8,16 @@ function getCallback(mockFn, eventName) {
   return call ? call[1] : undefined;
 }
 
+// listen() を即座に成功させるフェイク HTTP サーバー（MainRequestServer.start() が即解決する）
+function createFakeHttpServer() {
+  return {
+    on: vi.fn(),
+    once: vi.fn(),
+    off: vi.fn(),
+    listen: vi.fn((port, cb) => cb()),
+  };
+}
+
 const CONFIG_WITHOUT_SAVE_FILE = {
   deviceUrl: 'http://localhost:3001',
   mainPort: 4000,
@@ -24,9 +34,9 @@ const CONFIG_WITH_SAVE_FILE = {
 };
 
 // トップ階層の describe 間で共有する状態と、その初期化/後始末処理
-let app, mockExternalDeviceConnection, mockMainServer, fakeCreateExternalDeviceClient, fakeCreateServer;
+let app, mockExternalDeviceConnection, mockMainServer, fakeCreateExternalDeviceClient, fakeCreateHttpServer, fakeCreateSocketServer;
 
-function setupApp() {
+async function setupApp() {
   // 外部デバイスのモックを用意
   // 呼ばれたか、どんな引数で呼ばれたかを記録しつつ、実際には mockExternalDeviceConnection を返す Vitest のモック関数を定義
   // (vi -> Vitest のグローバルオブジェクト)
@@ -35,14 +45,16 @@ function setupApp() {
 
   // メインプロセスのモックを用意
   mockMainServer = { on: vi.fn() };
-  fakeCreateServer = vi.fn(() => mockMainServer);
+  fakeCreateHttpServer = vi.fn(() => createFakeHttpServer());
+  fakeCreateSocketServer = vi.fn(() => mockMainServer);
 
   // テスト用のダミーオブジェクトを作成して ConnectorApp を開始
   app = new ConnectorApp(CONFIG_WITHOUT_SAVE_FILE, {
     createExternalDeviceClient: fakeCreateExternalDeviceClient,
-    createServer: fakeCreateServer,
+    createHttpServer: fakeCreateHttpServer,
+    createSocketServer: fakeCreateSocketServer,
   });
-  app.start();
+  await app.start();
 }
 
 function teardownApp() {
@@ -54,34 +66,14 @@ describe('ConnectorApp: 初期化', () => {
   beforeEach(setupApp);
   afterEach(teardownApp);
 
-  it('初期化時は依存コンポーネントを生成せず、start() で生成する', () => {
-    const mockConn = { on: vi.fn(), emit: vi.fn() };
-    const mockServer = { on: vi.fn() };
-    const appWithoutStart = new ConnectorApp(CONFIG_WITH_SAVE_FILE, {
-      createExternalDeviceClient: vi.fn(() => mockConn),
-      createServer: vi.fn(() => mockServer),
-      createDataWriter: vi.fn(() => ({ writeBatch: vi.fn() })),
-    });
-
-    expect(appWithoutStart._latestCache).toBeNull();
-    expect(appWithoutStart._deviceConnection).toBeNull();
-    expect(appWithoutStart._mainRequestServer).toBeNull();
-    expect(appWithoutStart._deviceDataSaveScheduler).toBeNull();
-
-    appWithoutStart.start();
-
-    expect(appWithoutStart._latestCache).not.toBeNull();
-    expect(appWithoutStart._deviceConnection).not.toBeNull();
-    expect(appWithoutStart._mainRequestServer).not.toBeNull();
-    expect(appWithoutStart._deviceDataSaveScheduler).not.toBeNull();
-  });
-
   it('指定した deviceUrl に接続する', () => {
     expect(fakeCreateExternalDeviceClient).toHaveBeenCalledWith(CONFIG_WITHOUT_SAVE_FILE.deviceUrl);
   });
 
-  it('指定した mainPort を使用して Server を起動する', () => {
-    expect(fakeCreateServer).toHaveBeenCalledWith(CONFIG_WITHOUT_SAVE_FILE.mainPort);
+  it('指定した mainPort で HTTP サーバーを起動する', () => {
+    const fakeHttpServer = fakeCreateHttpServer.mock.results[0].value;
+    expect(fakeHttpServer.listen).toHaveBeenCalledWith(CONFIG_WITHOUT_SAVE_FILE.mainPort, expect.any(Function));
+    expect(fakeCreateSocketServer).toHaveBeenCalledWith(fakeHttpServer);
   });
 });
 
@@ -116,10 +108,52 @@ describe('ConnectorApp: メインプロセスへのデータ応答', () => {
   // MAIN_NO_DATA・複数件受信時の挙動・連続リクエストの詳細は mainRequestServer.test.js / latestDeviceDataCache.test.js に移設
 });
 
+describe('ConnectorApp: メインプロセスとの通信用サーバー起動失敗', () => {
+  afterEach(teardownApp);
+
+  it('listener 起動失敗時は start() が reject し、外部デバイス接続や保存スケジューラーは開始しない', async () => {
+    const failingHttpServer = {
+      on: vi.fn(),
+      once: vi.fn(),
+      off: vi.fn(),
+      listen: vi.fn(),
+    };
+    const fakeCreateExternalDeviceClientForFailure = vi.fn();
+    const fakeCreateDataWriterForFailure = vi.fn();
+
+    const appWithFailingServer = new ConnectorApp(CONFIG_WITH_SAVE_FILE, {
+      createExternalDeviceClient: fakeCreateExternalDeviceClientForFailure,
+      createHttpServer: vi.fn(() => failingHttpServer),
+      createSocketServer: vi.fn(() => ({ on: vi.fn() })),
+      createDataWriter: fakeCreateDataWriterForFailure,
+    });
+
+    // 前提: start() は Promise を返す
+    const startPromise = appWithFailingServer.start();
+
+    // 起動中に HTTP サーバーが listen 失敗によるエラー発火した状況を起こすための準備
+    const onError = getCallback(failingHttpServer.once, 'error');
+    onError(new Error('EADDRINUSE'));
+
+    // Promise が reject される期待を設定し、reject 理由を対象とする検証ラッパーを変数に受け取る(ここでは何も検証していない)
+    // expect(startPromise) -> startPromise を検証対象として Vitest に渡す
+    const rejectedAssertion = expect(startPromise).rejects;
+
+    // 検証ラッパーにマッチャーを適用することで、Error オブジェクトのプロパティを検証
+    await rejectedAssertion.toMatchObject({ kind: 3 });
+
+    // listen 失敗なら外部デバイス接続や保存スケジューラーは開始されていないことを確認
+    expect(fakeCreateExternalDeviceClientForFailure).not.toHaveBeenCalled();
+    expect(fakeCreateDataWriterForFailure).not.toHaveBeenCalled();
+    expect(appWithFailingServer._deviceConnection).toBeNull();
+    expect(appWithFailingServer._deviceDataSaveScheduler).toBeNull();
+  });
+});
+
 describe('ConnectorApp: ファイル保存設定なし', () => {
   afterEach(teardownApp);
 
-  it('saveFile 未定義時はファイル書き込みを開始しない', () => {
+  it('saveFile 未定義時はファイル書き込みを開始しない', async () => {
     vi.useFakeTimers();
 
     const mockConn = { on: vi.fn(), emit: vi.fn() };
@@ -130,10 +164,11 @@ describe('ConnectorApp: ファイル保存設定なし', () => {
     // saveFile が未定義の ConnectorApp を作成
     const appNoFile = new ConnectorApp(CONFIG_WITHOUT_SAVE_FILE, {
       createExternalDeviceClient: vi.fn(() => mockConn),
-      createServer: vi.fn(() => mockServer),
+      createHttpServer: vi.fn(() => createFakeHttpServer()),
+      createSocketServer: vi.fn(() => mockServer),
       createDataWriter: fakeCreateDataWriter,
     });
-    appNoFile.start();
+    await appNoFile.start();
 
     // タイマを進めてもファイル作成処理が呼ばれないことを確認
     vi.advanceTimersByTime(2000);
@@ -147,7 +182,7 @@ describe('ConnectorApp: 外部デバイスデータのファイル保存機能',
   let appWithFile, mockConn, mockServer, mockWriter, fakeCreateDataWriter;
 
   // テスト毎に saveFile が設定された ConnectorApp を作成して start() する
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
     mockConn = { on: vi.fn(), emit: vi.fn() };
     mockServer = { on: vi.fn() };
@@ -155,10 +190,11 @@ describe('ConnectorApp: 外部デバイスデータのファイル保存機能',
     fakeCreateDataWriter = vi.fn(() => mockWriter);
     appWithFile = new ConnectorApp(CONFIG_WITH_SAVE_FILE, {
       createExternalDeviceClient: vi.fn(() => mockConn),
-      createServer: vi.fn(() => mockServer),
+      createHttpServer: vi.fn(() => createFakeHttpServer()),
+      createSocketServer: vi.fn(() => mockServer),
       createDataWriter: fakeCreateDataWriter,
     });
-    appWithFile.start();
+    await appWithFile.start();
   });
 
   // 各テスト終了時にタイマを戻してモックをリセット

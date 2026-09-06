@@ -65,6 +65,7 @@ class ConnectorApp {
       createExternalDeviceClient: this._createExternalDeviceClient,
     });
 
+    // 受信の時点で JSON オブジェクトであることに注意
     this._deviceConnection.onData((data) => {
       this._latestCache.update(data);
 

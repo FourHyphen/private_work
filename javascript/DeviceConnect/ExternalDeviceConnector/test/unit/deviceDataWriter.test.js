@@ -23,10 +23,41 @@ describe('DeviceDataWriter', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('存在しない保存先ディレクトリでもディレクトリが作成される', () => {
+  it('存在しない保存先ディレクトリでもディレクトリが作成される', async () => {
     const filePath = path.join(tempDir, 'nested', 'data.jsonl');
-    new DeviceDataWriter({ ...SAVE_FILE, dataFilePath: filePath });
+    const writer = new DeviceDataWriter({ ...SAVE_FILE, dataFilePath: filePath });
+    await writer.prepareDirectory();
     expect(fs.existsSync(path.dirname(filePath))).toBe(true);
+  });
+
+  it('保存先ディレクトリ作成に失敗すると待機して再試行する。全て失敗すると kind: 2 のエラーを送出する', async () => {
+    const filePath = path.join(tempDir, 'nested', 'data.jsonl');
+    const mkdirError = new Error('mkdir failed');
+    const mkdirSpy = vi.spyOn(fs.promises, 'mkdir').mockRejectedValue(mkdirError);
+    vi.useFakeTimers();
+
+    try {
+      const writer = new DeviceDataWriter({ ...SAVE_FILE, dataFilePath: filePath });
+      const preparePromise = writer.prepareDirectory();
+      const rejection = expect(preparePromise).rejects.toMatchObject({
+        kind: 2,
+        cause: mkdirError,
+        message: expect.stringContaining(path.dirname(filePath)),
+      });
+
+      // 最初の失敗後、時間を進めなければ即時再試行されない
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mkdirSpy).toHaveBeenCalledTimes(1);
+
+      // 実装が決める待機時間・試行回数をすべて進める
+      await vi.runAllTimersAsync();
+
+      await rejection;
+      expect(mkdirSpy.mock.calls.length).toBeGreaterThanOrEqual(2);    // 2 回以上ならリトライしている
+    } finally {
+      mkdirSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('複数件のデータを順序どおり既存ファイルへ追記する', async () => {

@@ -37,6 +37,14 @@ class ConnectorApp {
     // メインプロセスに返却する最新データ管理
     this._latestCache = new LatestDeviceDataCache();
 
+    // 受信した外部デバイスデータを定期的にファイル保存する場合(任意)のファイル保存先ディレクトリ作成
+    // 失敗した場合はこの時点で処理終了(例外送出)
+    let dataWriter = null;
+    if (this.config.saveFile) {
+      dataWriter = this._createDataWriter(this.config.saveFile);
+      await dataWriter.prepareDirectory();
+    }
+
     // メインプロセスとの接続を受ける（listener 起動を他の初期化より先に完了させる）
     this._mainRequestServer = new MainRequestServer(this.config.mainPort, {
       createHttpServer: this._createHttpServer,
@@ -47,9 +55,7 @@ class ConnectorApp {
     // 受信した外部デバイスデータを定期的にファイル保存する(任意)
     // 開始直後に受信したデータを保存するため、外部デバイス接続開始前にこちらを開始すること
     if (this.config.saveFile) {
-      this._deviceDataSaveScheduler = new DeviceDataSaveScheduler(
-        this._createDataWriter(this.config.saveFile)
-      );
+      this._deviceDataSaveScheduler = new DeviceDataSaveScheduler(dataWriter);
       this._deviceDataSaveScheduler.start();
     }
 

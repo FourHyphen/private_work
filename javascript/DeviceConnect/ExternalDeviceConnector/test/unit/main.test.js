@@ -83,6 +83,19 @@ describe('main(): 起動通知', () => {
     expect(exitSpy).toHaveBeenCalledWith(3);
   });
 
+  it('保存先ディレクトリ作成失敗時は ready を送らず、startup-error を一度送ってコード 2 で終了する', async () => {
+    const error = new Error('Failed to create save directory');
+    error.kind = 2;
+    const createApp = vi.fn(() => ({ start: vi.fn(() => Promise.reject(error)) }));
+
+    await main({ connectorConfig: createFakeConnectorConfig(FAKE_CONFIG), createApp });
+
+    expect(sendSpy).not.toHaveBeenCalledWith({ type: 'ready' });
+    expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 2, reason: 'Failed to create save directory' });
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(exitSpy).toHaveBeenCalledWith(2);
+  });
+
   it('kind を持たないエラーはコード 99 にフォールバックする', async () => {
     const createApp = vi.fn(() => ({ start: vi.fn(() => Promise.reject(new Error('unexpected'))) }));
 

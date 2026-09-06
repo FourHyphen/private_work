@@ -10,10 +10,30 @@ class DeviceDataWriter {
     this._rotationBytes = saveFile.rotationKb * 1024;
     this._maxSaveFileNum = saveFile.maxSaveFileNum;
     this._now = now;
+  }
 
-    // ファイル保存先ディレクトリが存在しない場合は作成する
-    // TODO: 失敗時は複数回リトライし、それでも失敗するならファイルシステムに問題ありとして最上位に例外送出する
-    fs.mkdirSync(path.dirname(this._filePath), { recursive: true });
+  async prepareDirectory() {
+    const directoryPath = path.dirname(this._filePath);
+    let lastError;
+
+    // 数回リトライし、全て NG の場合に全体的な失敗とする
+    // 試行回数および待機時間は仕様に含めないため適宜変更可能
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await fs.promises.mkdir(directoryPath, { recursive: true });
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 3) {
+          await wait(500);
+        }
+      }
+    }
+
+    const error = new Error(`Failed to create save directory after 3 attempts: ${directoryPath}`);
+    error.kind = 2;
+    error.cause = lastError;
+    throw error;
   }
 
   // 複数件まとめてファイルに書き込む
@@ -123,6 +143,10 @@ class DeviceDataWriter {
     }
     return path.join(dir, candidate);
   }
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function formatTimestamp(date) {

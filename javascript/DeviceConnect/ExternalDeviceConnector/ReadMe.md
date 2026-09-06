@@ -278,6 +278,7 @@ sequenceDiagram
 ```
 
 ## 本プロセス起動時
+メインプロセスから本プロセスを起動し、メインプロセスとの疎通が成功/失敗してメッセージを返すまでの概要図
 ```mermaid
 sequenceDiagram
     participant MP as Main Process

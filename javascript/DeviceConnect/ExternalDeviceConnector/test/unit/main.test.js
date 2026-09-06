@@ -58,6 +58,18 @@ describe('main(): 起動通知', () => {
     expect(sendSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('argv 検証失敗時は startup-error を一度送ってコード 1 で終了する', async () => {
+    const createApp = vi.fn();
+    const error = new Error('invalid config');
+    error.kind = 1;
+
+    await main({ connectorConfig: createFakeConnectorConfig(error), createApp });
+
+    expect(createApp).not.toHaveBeenCalled();
+    expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 1, reason: 'invalid config' });
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
   it('起動失敗時は ready を送らず、startup-error を一度送ってコード 3 で終了する', async () => {
     const error = new Error('port in use');
     error.kind = 3;
@@ -71,22 +83,12 @@ describe('main(): 起動通知', () => {
     expect(exitSpy).toHaveBeenCalledWith(3);
   });
 
-  it('argv 検証失敗時は startup-error とコード 1 を維持する', async () => {
-    const createApp = vi.fn();
-
-    await main({ connectorConfig: createFakeConnectorConfig(new Error('invalid config')), createApp });
-
-    expect(createApp).not.toHaveBeenCalled();
-    expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 1, reason: 'invalid config' });
-    expect(exitSpy).toHaveBeenCalledWith(1);
-  });
-
-  it('kind を持たないエラーはコード 1 にフォールバックする', async () => {
+  it('kind を持たないエラーはコード 99 にフォールバックする', async () => {
     const createApp = vi.fn(() => ({ start: vi.fn(() => Promise.reject(new Error('unexpected'))) }));
 
     await main({ connectorConfig: createFakeConnectorConfig(FAKE_CONFIG), createApp });
 
-    expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 1, reason: 'unexpected' });
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 99, reason: 'unexpected' });
+    expect(exitSpy).toHaveBeenCalledWith(99);
   });
 });

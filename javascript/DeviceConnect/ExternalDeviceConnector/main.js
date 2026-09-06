@@ -21,8 +21,8 @@ async function main({
       process.send({ type: 'ready' });
     }
   } catch (error) {
-    // kind を持たないエラー（設定不正など）は終了コード 1 にフォールバックする
-    const kind = error?.kind ?? 1;
+    // kind を持たないエラーは終了コード 99 にフォールバック
+    const kind = error?.kind ?? 99;
 
     if (process.send) {
       process.send({

@@ -1,33 +1,39 @@
 const { ConfigSaveFile } = require('./configSaveFile');
 
+function createConfigError(message, ErrorClass = TypeError) {
+  const error = new ErrorClass(message);
+  error.kind = 1;
+  return error;
+}
+
 // 入力データを検証し、使用可能な形で格納する
 class ConnectorConfig {
   constructor({ deviceUrl, mainPort, pollIntervalMs, saveFile }) {
     if (typeof deviceUrl !== 'string') {
-      throw new TypeError('[connector] invalid config: deviceUrl must be a string');
+      throw createConfigError('[connector] invalid config: deviceUrl must be a string', TypeError);
     }
 
     if (!Number.isInteger(mainPort) || mainPort <= 0) {
-      throw new TypeError('[connector] invalid config: mainPort must be a positive integer');
+      throw createConfigError('[connector] invalid config: mainPort must be a positive integer', TypeError);
     }
 
     if (!Number.isInteger(pollIntervalMs) || pollIntervalMs <= 0) {
-      throw new TypeError('[connector] invalid config: pollIntervalMs must be a positive integer');
+      throw createConfigError('[connector] invalid config: pollIntervalMs must be a positive integer', TypeError);
     }
 
     // saveFile は省略可能
     this._saveFile = null;
     if (saveFile !== undefined && saveFile !== null) {
       if (typeof saveFile.dataFilePath !== 'string' || saveFile.dataFilePath === '') {
-        throw new TypeError('[connector] invalid config: dataFilePath must be a non-empty string');
+        throw createConfigError('[connector] invalid config: dataFilePath must be a non-empty string', TypeError);
       }
 
       if (!Number.isInteger(saveFile.rotationKb) || saveFile.rotationKb <= 0) {
-        throw new TypeError('[connector] invalid config: rotationKb must be a positive integer');
+        throw createConfigError('[connector] invalid config: rotationKb must be a positive integer', TypeError);
       }
 
       if (!Number.isInteger(saveFile.maxSaveFileNum) || saveFile.maxSaveFileNum <= 0) {
-        throw new TypeError('[connector] invalid config: maxSaveFileNum must be a positive integer');
+        throw createConfigError('[connector] invalid config: maxSaveFileNum must be a positive integer', TypeError);
       }
 
       // saveFile に問題なければインスタンス化
@@ -46,18 +52,18 @@ class ConnectorConfig {
   // 必要なものが揃っていなければ例外送出
   static fromArgv(argv = process.argv) {
     if (!Array.isArray(argv) || argv[2] === undefined) {
-      throw new Error('[connector] config JSON argument is required');
+      throw createConfigError('[connector] config JSON argument is required', Error);
     }
 
     let parsedConfig;
     try {
       parsedConfig = JSON.parse(argv[2]);
     } catch {
-      throw new Error('[connector] invalid config: argument is not valid JSON');
+      throw createConfigError('[connector] invalid config: argument is not valid JSON', Error);
     }
 
     if (parsedConfig === null || typeof parsedConfig !== 'object' || Array.isArray(parsedConfig)) {
-      throw new TypeError('[connector] invalid config: config must be an object');
+      throw createConfigError('[connector] invalid config: config must be an object', TypeError);
     }
 
     return new ConnectorConfig(parsedConfig);

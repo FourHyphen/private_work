@@ -23,7 +23,7 @@
 | イベント名 | 方向 | 説明 |
 |---|---|---|
 | `device:request` | Connector → 外部デバイス | ポーリングでデータ取得を要求する |
-| `device:data` | 外部デバイス → Connector | デバイスデータを返す。受信データはそのままキューに蓄積される |
+| `device:data` | 外部デバイス → Connector | デバイスデータを返す。サイズ制限を超えたデータは破棄される |
 
 ## メインプロセス向け socket.io イベント仕様
 | イベント名 | 方向 | 説明 |
@@ -31,6 +31,7 @@
 | `main:request` | メインプロセス → Connector | データ取得を要求する |
 | `main:data` | Connector → メインプロセス | キュー内の最新デバイスデータを `{ data, updatedAt }` で返す。`updatedAt` は Connector がデータを受信した時刻（ISO8601 文字列）であり、デバイス側のタイムスタンプではない |
 | `main:nodata` | Connector → メインプロセス | キューが空（デバイス未受信）のときに返す |
+| `main:data-oversized` | Connector → メインプロセス | 直近の受信データがサイズ超過または JSON 文字列化失敗のときに `{ data, updatedAt }` を返す。正常データがなければ値は `{ data: null, updatedAt: null }` |
 
 # 基盤
 - node.js
@@ -73,6 +74,7 @@ node main.js (Get-Content .\example\local-config.json -Raw)
 | `deviceUrl` | string | 必須 | 外部デバイスの socket.io URL |
 | `mainPort` | number | 必須 | メインプロセスと通信するポート番号（正の整数） |
 | `pollIntervalMs` | number | 必須 | 外部デバイスへのポーリング間隔（ms、正の整数） |
+| `maxDeviceDataBytes` | number | 任意 | 1 レコードの許容サイズ。`JSON.stringify` 後の文字列長（ASCII 前提、JSON 構文文字を含む）で判定する正の整数。未設定時は検証しない。迷った場合は JSON 構文文字を含む 5KiB 相当の `5120` を推奨 |
 | `saveFile` | ※1 | 任意 | 外部デバイスデータをファイルに保存する場合の必須パラメーター |
 
 ※1: `saveFile` は以下要素を持つオブジェクト
@@ -210,8 +212,13 @@ log.txt -> 最新データ。このファイルのサイズがしきい値をお
 
 ### 外部デバイスからのデータが巨大
 - 1 レコードが極端に大きい場合
-- 受信データの検証は T.B.D.
-  - メインプロセスとの契約も要検討
+- `maxDeviceDataBytes` が設定されている場合、`JSON.stringify(data).length` がしきい値を超えたデータを受信直後に破棄する
+  - キャッシュ更新、ファイル保存キュー登録、ファイル書き込みは行わない
+  - データ本体はログ出力せず、しきい値と超過または stringify エラーの種別だけを警告する
+- メインプロセスから `main:request` を受けた場合は `main:data-oversized` を返す
+  - 以前に正常データを受信していれば、そのデータと時刻を返す
+  - 正常データ未受信なら `{ data: null, updatedAt: null }` を返す
+- TODO: 巨大データを `JSON.stringify(data)` する処理に時間がかかるため、この検証処理が全体的な遅延を引き起こす可能性あり。より軽量な検証ロジックに変更したい
 
 ### 外部デバイスとの通信回復不可
 - 一時的な通信不可は `socket.io` により自動的に復旧を試みる

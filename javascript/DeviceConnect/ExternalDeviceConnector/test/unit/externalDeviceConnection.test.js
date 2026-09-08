@@ -12,12 +12,18 @@ const CONFIG = {
   deviceUrl: 'http://localhost:3001',
   pollIntervalMs: 500
 };
+const CONFIG_WITH_MAX_SIZE = { ...CONFIG, maxDeviceDataBytes: 10 };
 
 let connection, mockExternalDeviceClient, fakeCreateExternalDeviceClient;
 
 function setupConnection() {
   // 外部デバイスのモックを用意
-  mockExternalDeviceClient = { on: vi.fn(), emit: vi.fn() };
+  const eventListeners = new Map();
+  mockExternalDeviceClient = {
+    on: vi.fn((eventName, callback) => eventListeners.set(eventName, callback)),
+    emit: vi.fn(),
+    receive: (eventName, data) => eventListeners.get(eventName)?.(data),
+  };
   fakeCreateExternalDeviceClient = vi.fn(() => mockExternalDeviceClient);
 
   // ExternalDeviceConnection を生成して開始
@@ -164,5 +170,55 @@ describe('ExternalDeviceConnection: データ受信通知', () => {
     expect(() => {
       onData({ value: 42 });
     }).not.toThrow();
+  });
+
+  it('maxDeviceDataBytes を超えたデータはコールバックへ渡さず超過通知する', () => {
+    mockExternalDeviceClient.on.mockClear();
+
+    connection = new ExternalDeviceConnection(CONFIG_WITH_MAX_SIZE, {
+      createExternalDeviceClient: fakeCreateExternalDeviceClient,
+    });
+    connection.start();
+
+    // 正常データ受信時のコールバック
+    const mockCallback = vi.fn();
+    connection.onData(mockCallback);
+
+    // 不正データ受信時のコールバック
+    const mockOversizedCallback = vi.fn();
+    connection.onDataOversized(mockOversizedCallback);
+
+    // 不正データ受信
+    mockExternalDeviceClient.receive(DEVICE_DATA, { value: '123456789' });
+
+    // 正常データ受信コールバックが呼ばれず、超過通知コールバックが呼ばれることを確認
+    expect(mockCallback).not.toHaveBeenCalled();
+    expect(mockOversizedCallback).toHaveBeenCalledOnce();
+  });
+
+  it('JSON.stringify に失敗したデータは超過扱いで破棄する', () => {
+    mockExternalDeviceClient.on.mockClear();
+
+    connection = new ExternalDeviceConnection(CONFIG_WITH_MAX_SIZE, {
+      createExternalDeviceClient: fakeCreateExternalDeviceClient,
+    });
+    connection.start();
+
+    // 正常データ受信時のコールバック
+    const mockCallback = vi.fn();
+    connection.onData(mockCallback);
+
+    // 不正データ受信時のコールバック
+    const mockOversizedCallback = vi.fn();
+    connection.onDataOversized(mockOversizedCallback);
+
+    // JSON.stringify を失敗させるデータ(循環参照を含む)を受信
+    const circularData = {};
+    circularData.self = circularData;
+    mockExternalDeviceClient.receive(DEVICE_DATA, circularData);
+
+    // 正常データ受信コールバックが呼ばれず、超過通知コールバックが呼ばれることを確認
+    expect(mockCallback).not.toHaveBeenCalled();
+    expect(mockOversizedCallback).toHaveBeenCalledOnce();
   });
 });

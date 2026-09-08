@@ -1,5 +1,5 @@
 const { MainRequestServer } = require('../../mainRequestServer');
-const { MAIN_REQUEST, MAIN_DATA, MAIN_NO_DATA } = require('../../events');
+const { MAIN_REQUEST, MAIN_DATA, MAIN_NO_DATA, MAIN_DATA_OVERSIZED } = require('../../events');
 const { LatestDeviceDataCache } = require('../../latestDeviceDataCache');
 
 // mock.calls から指定イベント名のコールバックを取り出すヘルパー
@@ -49,7 +49,7 @@ describe('MainRequestServer: メインプロセスへのデータ応答', () => 
       latestCache
     );
     server.start();
-    return { mockSocketServer };
+    return { mockSocketServer, server };
   }
 
   it('キャッシュにデータがある場合は MAIN_DATA で { data, updatedAt } を返す', () => {
@@ -58,7 +58,7 @@ describe('MainRequestServer: メインプロセスへのデータ応答', () => 
     // キャッシュにデータを格納
     latestCache.update({ value: 42 });
 
-    const { mockSocketServer } = startServer(latestCache);
+    const { mockSocketServer, server } = startServer(latestCache);
 
     // メインプロセスとの接続を再現
     const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
@@ -84,7 +84,7 @@ describe('MainRequestServer: メインプロセスへのデータ応答', () => 
   it('キャッシュが空の場合は MAIN_NO_DATA を返す', () => {
     const latestCache = new LatestDeviceDataCache();
 
-    const { mockSocketServer } = startServer(latestCache);
+    const { mockSocketServer, server } = startServer(latestCache);
 
     // メインプロセスとの接続を再現
     const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
@@ -104,7 +104,7 @@ describe('MainRequestServer: メインプロセスへのデータ応答', () => 
     // 外部デバイスから 1 回データ受信した状況を再現
     latestCache.update({ value: 1 });
 
-    const { mockSocketServer } = startServer(latestCache);
+    const { mockSocketServer, server } = startServer(latestCache);
 
     // メインプロセスとの接続環境を再現
     const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
@@ -120,5 +120,31 @@ describe('MainRequestServer: メインプロセスへのデータ応答', () => 
     // 2 回目のメインプロセスからのデータ要求でもデータを返す（MAIN_NO_DATA を返さない）
     getCallback(mockClientSocket.on, MAIN_REQUEST)();
     expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA, expect.anything());
+  });
+
+  it('直近受信が超過の場合はキャッシュの最新値とともに MAIN_DATA_OVERSIZED を返す', () => {
+    // 正常データ受信したキャッシュを用意
+    const latestCache = new LatestDeviceDataCache();
+    latestCache.update({ value: 42 });
+
+    // listen 成功済みの MainRequestServer
+    const { mockSocketServer, server } = startServer(latestCache);
+
+    // メインプロセスとの接続を再現
+    const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
+    getCallback(mockSocketServer.on, 'connection')(mockClientSocket);
+
+    // 直近受信データがサイズ超過だったと設定
+    server.markDataOversized();
+
+    // メインプロセスからのデータ要求
+    const serverRequestCallback = getCallback(mockClientSocket.on, MAIN_REQUEST);
+    serverRequestCallback();
+
+    // 直近受信データがサイズ超過のため、oversized フラグ付きでキャッシュ内正常受信データを返すことを確認
+    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA_OVERSIZED, {
+      data: { value: 42 },
+      updatedAt: expect.any(String)
+    });
   });
 });

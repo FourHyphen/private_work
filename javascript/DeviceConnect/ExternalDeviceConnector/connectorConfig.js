@@ -8,7 +8,7 @@ function createConfigError(message, ErrorClass = TypeError) {
 
 // 入力データを検証し、使用可能な形で格納する
 class ConnectorConfig {
-  constructor({ deviceUrl, mainPort, pollIntervalMs, saveFile }) {
+  constructor({ deviceUrl, mainPort, pollIntervalMs, maxDeviceDataBytes, saveFile }) {
     if (typeof deviceUrl !== 'string') {
       throw createConfigError('[connector] invalid config: deviceUrl must be a string', TypeError);
     }
@@ -19,6 +19,13 @@ class ConnectorConfig {
 
     if (!Number.isInteger(pollIntervalMs) || pollIntervalMs <= 0) {
       throw createConfigError('[connector] invalid config: pollIntervalMs must be a positive integer', TypeError);
+    }
+
+    // maxDeviceDataBytes は省略可能
+    if (maxDeviceDataBytes !== undefined) {
+      if ((!Number.isInteger(maxDeviceDataBytes) || maxDeviceDataBytes <= 0)) {
+        throw createConfigError('[connector] invalid config: maxDeviceDataBytes must be a positive integer', TypeError);
+      }
     }
 
     // saveFile は省略可能
@@ -44,6 +51,7 @@ class ConnectorConfig {
     this._deviceUrl = deviceUrl;
     this._mainPort = mainPort;
     this._pollIntervalMs = pollIntervalMs;
+    this._maxDeviceDataBytes = maxDeviceDataBytes;
 
     Object.freeze(this);
   }
@@ -79,6 +87,10 @@ class ConnectorConfig {
 
   get pollIntervalMs() {
     return this._pollIntervalMs;
+  }
+
+  get maxDeviceDataBytes() {
+    return this._maxDeviceDataBytes;
   }
 
   get saveFile() {

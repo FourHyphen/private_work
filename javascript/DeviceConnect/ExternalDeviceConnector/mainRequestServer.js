@@ -3,7 +3,8 @@ const { Server } = require('socket.io');
 const {
   MAIN_REQUEST,
   MAIN_DATA,
-  MAIN_NO_DATA
+  MAIN_NO_DATA,
+  MAIN_DATA_OVERSIZED
 } = require('./events');
 
 // メインプロセスとの接続を管理する
@@ -26,6 +27,7 @@ class MainRequestServer {
     this._latestCache = latestCache;
     this._httpServer = null;
     this._server = null;
+    this._latestReceiveStatus = 'none';    // TODO: status の ENUM 化
   }
 
   // return: 以下を設定した Promise
@@ -43,9 +45,17 @@ class MainRequestServer {
       socket.on(MAIN_REQUEST, () => {
         const item = this._latestCache.latest();
 
-        // 最新キャッシュが空の場合はデータなしイベントを返却
-        if (item === null) {
+        // 一度も正常データを受信したことがない場合はデータなしイベントを返却
+        if (this._latestReceiveStatus === 'none' && item === null) {
           socket.emit(MAIN_NO_DATA);
+          return;
+        }
+
+        if (this._latestReceiveStatus === 'oversized') {
+          socket.emit(MAIN_DATA_OVERSIZED, {
+            data: item ? item.data : null,
+            updatedAt: item ? item.updatedAt.toISOString() : null
+          });
           return;
         }
 
@@ -101,6 +111,14 @@ class MainRequestServer {
         onError(error);
       }
     });
+  }
+
+  markDataReceived() {
+    this._latestReceiveStatus = 'normal';
+  }
+
+  markDataOversized() {
+    this._latestReceiveStatus = 'oversized';
   }
 }
 

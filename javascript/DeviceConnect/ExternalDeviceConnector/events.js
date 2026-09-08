@@ -7,5 +7,6 @@ module.exports = {
   // メインプロセス <-> Connector
   MAIN_REQUEST: 'main:request',     // メインプロセス -> Connector: データ取得要求
   MAIN_DATA: 'main:data',           // Connector -> メインプロセス: 外部デバイスデータ返却
-  MAIN_NO_DATA: 'main:nodata'       // Connector -> メインプロセス: バッファが空（未受信）
+  MAIN_NO_DATA: 'main:nodata',       // Connector -> メインプロセス: バッファが空（未受信）
+  MAIN_DATA_OVERSIZED: 'main:data-oversized' // Connector -> メインプロセス: 直近受信データがサイズ超過
 };

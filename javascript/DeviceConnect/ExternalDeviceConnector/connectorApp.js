@@ -68,12 +68,18 @@ class ConnectorApp {
     // 受信の時点で JSON オブジェクトであることに注意
     this._deviceConnection.onData((data) => {
       this._latestCache.update(data);
+      this._mainRequestServer.markDataReceived();
 
       // 保存スケジューラーのキューに追加してファイル保存されるようにする
       // (LatestCache 側でのデータ編集内容を取り込むため latest() で取得)
       if (this._deviceDataSaveScheduler) {
         this._deviceDataSaveScheduler.enqueue(this._latestCache.latest());
       }
+    });
+
+    // サイズ超過データ受信時の処理を設定
+    this._deviceConnection.onDataOversized(() => {
+      this._mainRequestServer.markDataOversized();
     });
 
     this._deviceConnection.start();

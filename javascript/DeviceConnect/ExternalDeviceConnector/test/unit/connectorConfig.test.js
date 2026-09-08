@@ -25,6 +25,11 @@ describe('ConnectorConfig: 設定値を保持する', () => {
     expect(config.pollIntervalMs).toBe(VALID_WITHOUT_DATAFILEPATH.pollIntervalMs);
   });
 
+  it('maxDeviceDataBytes を省略可能な設定値として保持する', () => {
+    const config = new ConnectorConfig({ ...VALID_WITHOUT_DATAFILEPATH, maxDeviceDataBytes: 5120 });
+    expect(config.maxDeviceDataBytes).toBe(5120);
+  });
+
   it('dataFilePath を省略した場合は saveFile を null として保持する', () => {
     const config = new ConnectorConfig(VALID_WITHOUT_DATAFILEPATH);
     expect(config.saveFile).toBeNull();
@@ -65,6 +70,17 @@ describe('ConnectorConfig: 設定値を検証する', () => {
     ['文字列', '1000']
   ])('pollIntervalMs が%sの場合は TypeError(kind: 1) を送出する', (_, pollIntervalMs) => {
     expect(() => new ConnectorConfig({ ...VALID_WITHOUT_DATAFILEPATH, pollIntervalMs }))
+      .toThrow(expect.objectContaining({ kind: 1 }));
+  });
+
+  it.each([
+    ['0', 0],
+    ['負の数', -1],
+    ['小数', 3.5],
+    ['文字列', '5120'],
+    ['null', null]
+  ])('maxDeviceDataBytes が%sの場合は TypeError(kind: 1) を送出する', (_, maxDeviceDataBytes) => {
+    expect(() => new ConnectorConfig({ ...VALID_WITHOUT_DATAFILEPATH, maxDeviceDataBytes }))
       .toThrow(expect.objectContaining({ kind: 1 }));
   });
 

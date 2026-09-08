@@ -1,6 +1,6 @@
 // ConnectorApp はソケットファクトリを注入できるため、モックフレームワーク不要
 const { ConnectorApp } = require('../../connectorApp');
-const { DEVICE_REQUEST, DEVICE_DATA, MAIN_REQUEST, MAIN_DATA, MAIN_NO_DATA } = require('../../events');
+const { DEVICE_REQUEST, DEVICE_DATA, MAIN_REQUEST, MAIN_DATA, MAIN_NO_DATA, MAIN_DATA_OVERSIZED } = require('../../events');
 
 // mock.calls から指定イベント名のコールバックを取り出すヘルパー
 function getCallback(mockFn, eventName) {
@@ -32,6 +32,9 @@ const CONFIG_WITH_SAVE_FILE = {
     maxSaveFileNum: 5
   }
 };
+
+// 20 byte を超過するデータを受信すると oversized とする設定
+const CONFIG_WITH_MAX_SIZE = { ...CONFIG_WITHOUT_SAVE_FILE, maxDeviceDataBytes: 20 };
 
 // トップ階層の describe 間で共有する状態と、その初期化/後始末処理
 let app, mockExternalDeviceConnection, mockMainServer, fakeCreateExternalDeviceClient, fakeCreateHttpServer, fakeCreateSocketServer;
@@ -104,6 +107,61 @@ describe('ConnectorApp: メインプロセスへのデータ応答', () => {
     // updatedAt は ISO8601 文字列であること
     expect(typeof payload.updatedAt).toBe('string');
     expect(new Date(payload.updatedAt).toISOString()).toBe(payload.updatedAt);
+  });
+
+  it('超過データ受信後は MAIN_DATA_OVERSIZED として前回正常値を返す', async () => {
+    const mockConn = { on: vi.fn(), emit: vi.fn() };
+    const mockServer = { on: vi.fn() };
+    const oversizedApp = new ConnectorApp(CONFIG_WITH_MAX_SIZE, {
+      createExternalDeviceClient: vi.fn(() => mockConn),
+      createHttpServer: vi.fn(() => createFakeHttpServer()),
+      createSocketServer: vi.fn(() => mockServer),
+    });
+    await oversizedApp.start();
+
+    // 正常データ受信
+    getCallback(mockConn.on, DEVICE_DATA)({ value: 1 });
+
+    // サイズ超過データ受信
+    getCallback(mockConn.on, DEVICE_DATA)({ value: '123456789' });
+
+    // メインプロセスからの接続およびデータ要求を再現
+    const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
+    getCallback(mockServer.on, 'connection')(mockClientSocket);
+    getCallback(mockClientSocket.on, MAIN_REQUEST)();
+
+    // 直近受信データがサイズ超過のため oversized を返すこと、
+    // 直近の正常データを返すことを確認
+    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA_OVERSIZED, {
+      data: { value: 1 },
+      updatedAt: expect.any(String)
+    });
+  });
+
+  it('正常データ未受信で超過した場合は null のペイロードを返す', async () => {
+    const mockConn = { on: vi.fn(), emit: vi.fn() };
+    const mockServer = { on: vi.fn() };
+    const oversizedApp = new ConnectorApp(CONFIG_WITH_MAX_SIZE, {
+      createExternalDeviceClient: vi.fn(() => mockConn),
+      createHttpServer: vi.fn(() => createFakeHttpServer()),
+      createSocketServer: vi.fn(() => mockServer),
+    });
+    await oversizedApp.start();
+
+    // サイズ超過データ受信
+    getCallback(mockConn.on, DEVICE_DATA)({ value: '123456789' });
+
+    // メインプロセスからの接続およびデータ要求を再現
+    const mockClientSocket = { on: vi.fn(), emit: vi.fn() };
+    getCallback(mockServer.on, 'connection')(mockClientSocket);
+    getCallback(mockClientSocket.on, MAIN_REQUEST)();
+
+    // 直近受信データがサイズ超過のため oversized を返すこと、
+    // 正常データの受信履歴がないため null を返すことを確認
+    expect(mockClientSocket.emit).toHaveBeenCalledWith(MAIN_DATA_OVERSIZED, {
+      data: null,
+      updatedAt: null
+    });
   });
   // MAIN_NO_DATA・複数件受信時の挙動・連続リクエストの詳細は mainRequestServer.test.js / latestDeviceDataCache.test.js に移設
 });

@@ -26,8 +26,27 @@ describe('DeviceDataWriter', () => {
   it('存在しない保存先ディレクトリでもディレクトリが作成される', async () => {
     const filePath = path.join(tempDir, 'nested', 'data.jsonl');
     const writer = new DeviceDataWriter({ ...SAVE_FILE, dataFilePath: filePath });
-    await writer.prepareDirectory();
+    await writer.prepareSaveFile();
     expect(fs.existsSync(path.dirname(filePath))).toBe(true);
+  });
+
+  it('保存先ファイルを追記モードで開けないと kind: 2 のエラーを送出する', async () => {
+    const filePath = path.join(tempDir, 'data.jsonl');
+    const openError = new Error('open failed');
+    const openSpy = vi.spyOn(fs.promises, 'open').mockRejectedValue(openError);
+
+    try {
+      const writer = new DeviceDataWriter({ ...SAVE_FILE, dataFilePath: filePath });
+      await expect(writer.prepareSaveFile()).rejects.toMatchObject({
+        kind: 2,
+        cause: openError,
+      });
+
+      expect(openSpy).toHaveBeenCalledTimes(3);
+      expect(openSpy).toHaveBeenCalledWith(filePath, 'a');
+    } finally {
+      openSpy.mockRestore();
+    }
   });
 
   it('保存先ディレクトリ作成に失敗すると待機して再試行する。全て失敗すると kind: 2 のエラーを送出する', async () => {
@@ -38,7 +57,7 @@ describe('DeviceDataWriter', () => {
 
     try {
       const writer = new DeviceDataWriter({ ...SAVE_FILE, dataFilePath: filePath });
-      const preparePromise = writer.prepareDirectory();
+      const preparePromise = writer.prepareSaveFile();
       const rejection = expect(preparePromise).rejects.toMatchObject({
         kind: 2,
         cause: mkdirError,

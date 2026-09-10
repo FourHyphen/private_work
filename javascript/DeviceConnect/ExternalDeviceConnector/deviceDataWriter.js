@@ -12,7 +12,8 @@ class DeviceDataWriter {
     this._now = now;
   }
 
-  async prepareDirectory() {
+  // 保存先ディレクトリを作成し、実際にファイルに保存可能な状態か確認する
+  async prepareSaveFile() {
     const directoryPath = path.dirname(this._filePath);
     let lastError;
 
@@ -21,6 +22,11 @@ class DeviceDataWriter {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         await fs.promises.mkdir(directoryPath, { recursive: true });
+
+        // ファイルを append モードで開ければ少なくとも権限があり、
+        // ファイルシステムに最低限の問題ないとする
+        const fileHandle = await fs.promises.open(this._filePath, 'a');
+        await fileHandle.close();
         return;
       } catch (error) {
         lastError = error;

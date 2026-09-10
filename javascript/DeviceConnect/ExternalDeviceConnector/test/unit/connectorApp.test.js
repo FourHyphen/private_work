@@ -177,7 +177,7 @@ describe('ConnectorApp: メインプロセスとの通信用サーバー起動�
       listen: vi.fn(),
     };
     const fakeCreateExternalDeviceClientForFailure = vi.fn();
-    const fakeCreateDataWriterForFailure = vi.fn(() => ({ prepareDirectory: vi.fn() }));
+    const fakeCreateDataWriterForFailure = vi.fn(() => ({ prepareSaveFile: vi.fn() }));
 
     const appWithFailingServer = new ConnectorApp(CONFIG_WITH_SAVE_FILE, {
       createExternalDeviceClient: fakeCreateExternalDeviceClientForFailure,
@@ -220,7 +220,7 @@ describe('ConnectorApp: ファイル保存設定なし', () => {
 
     const mockConn = { on: vi.fn(), emit: vi.fn() };
     const mockServer = { on: vi.fn() };
-    const mockWriter = { prepareDirectory: vi.fn(), writeBatch: vi.fn() };
+    const mockWriter = { prepareSaveFile: vi.fn(), writeBatch: vi.fn() };
     const fakeCreateDataWriter = vi.fn(() => mockWriter);
 
     // saveFile が未定義の ConnectorApp を作成
@@ -248,7 +248,7 @@ describe('ConnectorApp: 外部デバイスデータのファイル保存機能',
     vi.useFakeTimers();
     mockConn = { on: vi.fn(), emit: vi.fn() };
     mockServer = { on: vi.fn() };
-    mockWriter = { prepareDirectory: vi.fn(), writeBatch: vi.fn() };
+    mockWriter = { prepareSaveFile: vi.fn(), writeBatch: vi.fn() };
     fakeCreateDataWriter = vi.fn(() => mockWriter);
     appWithFile = new ConnectorApp(CONFIG_WITH_SAVE_FILE, {
       createExternalDeviceClient: vi.fn(() => mockConn),
@@ -264,7 +264,7 @@ describe('ConnectorApp: 外部デバイスデータのファイル保存機能',
 
   it('config.saveFile がある場合、初回フラッシュで受信データを書き込む', () => {
     expect(fakeCreateDataWriter).toHaveBeenCalledWith(CONFIG_WITH_SAVE_FILE.saveFile);
-    expect(mockWriter.prepareDirectory).toHaveBeenCalledOnce();
+    expect(mockWriter.prepareSaveFile).toHaveBeenCalledOnce();
 
     // 外部デバイスからデータ受信
     getCallback(mockConn.on, DEVICE_DATA)({ value: 42 });

@@ -42,7 +42,7 @@ class ConnectorApp {
     let dataWriter = null;
     if (this.config.saveFile) {
       dataWriter = this._createDataWriter(this.config.saveFile);
-      await dataWriter.prepareDirectory();
+      await dataWriter.prepareSaveFile();
     }
 
     // メインプロセスとの接続を受ける（listener 起動を他の初期化より先に完了させる）

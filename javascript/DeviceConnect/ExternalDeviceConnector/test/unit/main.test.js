@@ -18,7 +18,9 @@ describe('main(): 起動通知', () => {
   let sendSpy, exitSpy;
 
   beforeEach(() => {
-    sendSpy = vi.fn();
+    sendSpy = vi.fn((msg, cb) => {
+      if (typeof cb === 'function') cb();
+    });
     exitSpy = vi.fn();
     process.send = sendSpy;
     process.exit = exitSpy;
@@ -67,7 +69,10 @@ describe('main(): 起動通知', () => {
     await main({ connectorConfig: createFakeConnectorConfig(error), createApp });
 
     // argv 検証失敗時のメッセージ確認
-    expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 1, reason: 'invalid config' });
+    expect(sendSpy).toHaveBeenCalledWith(
+      { type: 'startup-error', kind: 1, reason: 'invalid config' },
+      expect.any(Function)
+    );
 
     // 終了コードを確認
     expect(exitSpy).toHaveBeenCalledWith(1);
@@ -85,7 +90,10 @@ describe('main(): 起動通知', () => {
     expect(sendSpy).not.toHaveBeenCalledWith({ type: 'ready' });
 
     // ポート使用中を一度のみ送信
-    expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 3, reason: 'port in use' });
+    expect(sendSpy).toHaveBeenCalledWith(
+      { type: 'startup-error', kind: 3, reason: 'port in use' },
+      expect.any(Function)
+    );
     expect(sendSpy).toHaveBeenCalledTimes(1);
 
     // 終了コードの確認
@@ -104,7 +112,10 @@ describe('main(): 起動通知', () => {
     expect(sendSpy).not.toHaveBeenCalledWith({ type: 'ready' });
 
     // 保存先ディレクトリ作成失敗を一度のみ送信
-    expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 2, reason: 'Failed to create save directory' });
+    expect(sendSpy).toHaveBeenCalledWith(
+      { type: 'startup-error', kind: 2, reason: 'Failed to create save directory' },
+      expect.any(Function)
+    );
     expect(sendSpy).toHaveBeenCalledTimes(1);
 
     // 終了コードの確認
@@ -118,7 +129,10 @@ describe('main(): 起動通知', () => {
     await main({ connectorConfig: createFakeConnectorConfig(FAKE_CONFIG), createApp });
 
     // start() が reject すなわち失敗時の挙動を確認
-    expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 99, reason: 'unexpected' });
+    expect(sendSpy).toHaveBeenCalledWith(
+      { type: 'startup-error', kind: 99, reason: 'unexpected' },
+      expect.any(Function)
+    );
     expect(exitSpy).toHaveBeenCalledWith(99);
   });
 
@@ -138,11 +152,14 @@ describe('main(): 起動通知', () => {
     expect(sendSpy).toHaveBeenCalledWith({ type: 'ready' });
 
     // 書き込みハングエラー発生時の挙動を確認
-    expect(sendSpy).toHaveBeenCalledWith({
-      type: 'save-write-hang',
-      kind: 4,
-      reason: 'Save file write hang detected',
-    });
+    expect(sendSpy).toHaveBeenCalledWith(
+      {
+        type: 'save-write-hang',
+        kind: 4,
+        reason: 'Save file write hang detected',
+      },
+      expect.any(Function)
+    );
     expect(exitSpy).toHaveBeenCalledWith(4);
   });
 });

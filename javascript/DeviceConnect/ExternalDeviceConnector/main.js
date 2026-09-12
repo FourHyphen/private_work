@@ -39,15 +39,19 @@ async function main({
     // kind を持たないエラーは終了コード 99 にフォールバック
     const kind = error?.kind ?? 99;
 
+    console.error(error instanceof Error ? error.message : error);
+
+    // 確実にメインプロセスに send してから exit する
     if (process.send) {
-      process.send({
-        type: error?.type ?? 'startup-error',
-        kind,
-        reason: String(error?.message ?? error),
+      await new Promise((resolve) => {
+        process.send({
+          type: error?.type ?? 'startup-error',
+          kind,
+          reason: String(error?.message ?? error),
+        }, () => resolve());
       });
     }
 
-    console.error(error instanceof Error ? error.message : error);
     process.exit(kind);
   }
 }

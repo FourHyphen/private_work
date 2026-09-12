@@ -29,6 +29,36 @@ class ConnectorApp {
     this._mainRequestServer = null;
     this._latestCache = null;
     this._deviceDataSaveScheduler = null;
+    this._fatalSettled = false;
+    this._fatalPromise = new Promise((resolve, reject) => {
+      this._resolveFatal = resolve;
+      this._rejectFatal = reject;
+    });
+  }
+
+  waitUntilFatal() {
+    return this._fatalPromise;
+  }
+
+  // 致命的なエラーが発生するなどした場合にそのことを本クラスに通知する窓口
+  // (main.js の catch にエラーを渡せる実装)
+  reportFatal(error) {
+    if (this._fatalSettled) {
+      return;
+    }
+
+    this._fatalSettled = true;
+    this._rejectFatal(error);
+  }
+
+  // 正常終了要求時にそのことを本クラスに通知する窓口
+  stop() {
+    if (this._fatalSettled) {
+      return;
+    }
+
+    this._fatalSettled = true;
+    this._resolveFatal();
   }
 
   // mainPort の listener が利用可能になるまで解決しない

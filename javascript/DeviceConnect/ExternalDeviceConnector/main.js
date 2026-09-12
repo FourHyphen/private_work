@@ -20,13 +20,20 @@ async function main({
     if (process.send) {    // IPC 未使用実行時は false
       process.send({ type: 'ready' });
     }
+
+    // 本番実行: ready 通知後も、実行中の致命的エラーまたは stop() までプロセスを維持する
+    //           (この wait がないと ready 送信後の例外をこの try catch で検知できない)
+    // 検証実行: 単体テスト用に無限待機メソッドを持たない簡易テストモックを許容するための条件分岐
+    if (typeof app.waitUntilFatal === 'function') {
+      await app.waitUntilFatal();
+    }
   } catch (error) {
     // kind を持たないエラーは終了コード 99 にフォールバック
     const kind = error?.kind ?? 99;
 
     if (process.send) {
       process.send({
-        type: 'startup-error',
+        type: error?.type ?? 'startup-error',
         kind,
         reason: String(error?.message ?? error),
       });

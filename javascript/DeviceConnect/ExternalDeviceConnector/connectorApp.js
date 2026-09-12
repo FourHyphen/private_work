@@ -9,7 +9,7 @@ const { DeviceDataSaveScheduler } = require('./deviceDataSaveScheduler');
 
 class ConnectorApp {
   // コンストラクタ第 2 引数
-  //  -> createExternalDeviceClient / createHttpServer / createSocketServer / createDataWriter テスト時にフェイクファクトリを注入できるようにする
+  //  -> createExternalDeviceClient / createHttpServer / createSocketServer / createDataWriter / createSaveScheduler テスト時にフェイクファクトリを注入できるようにする
   //     省略時は本番想定、デフォルト設定を使用
   constructor(
     config,
@@ -18,6 +18,7 @@ class ConnectorApp {
       createHttpServer = () => http.createServer(),
       createSocketServer = (httpServer) => new Server(httpServer),
       createDataWriter = (saveFile) => new DeviceDataWriter(saveFile),
+      createSaveScheduler = (writer, options) => new DeviceDataSaveScheduler(writer, options),
     } = {}
   ) {
     this.config = config;
@@ -25,6 +26,7 @@ class ConnectorApp {
     this._createHttpServer = createHttpServer;
     this._createSocketServer = createSocketServer;
     this._createDataWriter = createDataWriter;
+    this._createSaveScheduler = createSaveScheduler;
     this._deviceConnection = null;
     this._mainRequestServer = null;
     this._latestCache = null;
@@ -34,6 +36,8 @@ class ConnectorApp {
       this._resolveFatal = resolve;
       this._rejectFatal = reject;
     });
+    // unhandled rejection の警告を防ぎつつ、呼び出し側が await できるようにする
+    this._fatalPromise.catch(() => {});
   }
 
   waitUntilFatal() {
@@ -41,7 +45,7 @@ class ConnectorApp {
   }
 
   // 致命的なエラーが発生するなどした場合にそのことを本クラスに通知する窓口
-  // (main.js の catch にエラーを渡せる実装)
+  // 目的: start() が一通り成功した後に発生したエラーを main.js の catch に渡す
   reportFatal(error) {
     if (this._fatalSettled) {
       return;
@@ -51,10 +55,15 @@ class ConnectorApp {
     this._rejectFatal(error);
   }
 
-  // 正常終了要求時にそのことを本クラスに通知する窓口
+  // 各種処理停止
+  // TODO: 各種処理を停止する(ハング時に停止処理を実行できるかは要検討)
   stop() {
     if (this._fatalSettled) {
       return;
+    }
+
+    if (this._deviceDataSaveScheduler) {
+      this._deviceDataSaveScheduler.stop();
     }
 
     this._fatalSettled = true;
@@ -85,7 +94,15 @@ class ConnectorApp {
     // 受信した外部デバイスデータを定期的にファイル保存する(任意)
     // 開始直後に受信したデータを保存するため、外部デバイス接続開始前にこちらを開始すること
     if (this.config.saveFile) {
-      this._deviceDataSaveScheduler = new DeviceDataSaveScheduler(dataWriter);
+      this._deviceDataSaveScheduler = this._createSaveScheduler(dataWriter, {
+        // main.js の catch を通すよう、直接例外送出せず reportFatal() を実行すること
+        onHang: (err) => {
+          const error = new Error(err?.message || 'Save file write hang detected');
+          error.kind = 4;
+          error.type = 'save-write-hang';
+          this.reportFatal(error);
+        },
+      });
       this._deviceDataSaveScheduler.start();
     }
 

@@ -318,4 +318,40 @@ describe('ConnectorApp: 外部デバイスデータのファイル保存機能',
     expect(secondPayload).toHaveLength(1);
     expect(secondPayload[0].data).toEqual({ value: 2 });
   });
+
+  it('書き込みハング発生時に waitUntilFatal() が kind: 4, type: "save-write-hang" で reject される', async () => {
+    // writeBatch が完了しない状態を再現(resolve も reject もしない Promise は永遠に完了しない)
+    mockWriter.writeBatch.mockImplementation(() => new Promise(() => {}));
+
+    // console.error の呼び出しを抑制してテスト出力を汚さない
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // 致命的エラーとなるまでの待機
+    const fatalPromise = appWithFile.waitUntilFatal();
+
+    // 外部デバイスからデータ受信
+    getCallback(mockConn.on, DEVICE_DATA)({ value: 1 });
+
+    // フラッシュ開始実行
+    await vi.advanceTimersByTimeAsync(500);
+    expect(mockWriter.writeBatch).toHaveBeenCalledTimes(1);
+
+    // デフォルトタイムアウト（30000ms）を経過させてハングを発火
+    await vi.advanceTimersByTimeAsync(30000);
+
+    // waitUntilFatal が書き込み処理ハングとして reject されることを確認
+    await expect(fatalPromise).rejects.toMatchObject({
+      kind: 4,
+      type: 'save-write-hang',
+    });
+  });
+
+  it('stop() 呼び出しで保存スケジューラーが停止される', async () => {
+    appWithFile.stop();
+
+    // 外部デバイスからデータ受信して時間を進めても書き込まれないことを確認
+    getCallback(mockConn.on, DEVICE_DATA)({ value: 1 });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockWriter.writeBatch).not.toHaveBeenCalled();
+  });
 });

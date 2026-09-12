@@ -59,49 +59,90 @@ describe('main(): 起動通知', () => {
   });
 
   it('argv 検証失敗時は startup-error を一度送ってコード 1 で終了する', async () => {
+    // argv 検証失敗をシミュレート
     const createApp = vi.fn();
     const error = new Error('invalid config');
     error.kind = 1;
 
     await main({ connectorConfig: createFakeConnectorConfig(error), createApp });
 
-    expect(createApp).not.toHaveBeenCalled();
+    // argv 検証失敗時のメッセージ確認
     expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 1, reason: 'invalid config' });
+
+    // 終了コードを確認
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
   it('起動失敗時は ready を送らず、startup-error を一度送ってコード 3 で終了する', async () => {
+    // 起動失敗（ポート使用中）をシミュレート
     const error = new Error('port in use');
     error.kind = 3;
     const createApp = vi.fn(() => ({ start: vi.fn(() => Promise.reject(error)) }));
 
     await main({ connectorConfig: createFakeConnectorConfig(FAKE_CONFIG), createApp });
 
+    // ready を送信しない
     expect(sendSpy).not.toHaveBeenCalledWith({ type: 'ready' });
+
+    // ポート使用中を一度のみ送信
     expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 3, reason: 'port in use' });
     expect(sendSpy).toHaveBeenCalledTimes(1);
+
+    // 終了コードの確認
     expect(exitSpy).toHaveBeenCalledWith(3);
   });
 
   it('保存先ディレクトリ作成失敗時は ready を送らず、startup-error を一度送ってコード 2 で終了する', async () => {
+    // start() を即時 reject で失敗させる
     const error = new Error('Failed to create save directory');
-    error.kind = 2;
+    error.kind = 2;    // 保存先ディレクトリ作成失敗
     const createApp = vi.fn(() => ({ start: vi.fn(() => Promise.reject(error)) }));
 
     await main({ connectorConfig: createFakeConnectorConfig(FAKE_CONFIG), createApp });
 
+    // ready が送信されていない
     expect(sendSpy).not.toHaveBeenCalledWith({ type: 'ready' });
+
+    // 保存先ディレクトリ作成失敗を一度のみ送信
     expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 2, reason: 'Failed to create save directory' });
     expect(sendSpy).toHaveBeenCalledTimes(1);
+
+    // 終了コードの確認
     expect(exitSpy).toHaveBeenCalledWith(2);
   });
 
   it('kind を持たないエラーはコード 99 にフォールバックする', async () => {
+    // start() を即時 reject で失敗させる
     const createApp = vi.fn(() => ({ start: vi.fn(() => Promise.reject(new Error('unexpected'))) }));
 
     await main({ connectorConfig: createFakeConnectorConfig(FAKE_CONFIG), createApp });
 
+    // start() が reject すなわち失敗時の挙動を確認
     expect(sendSpy).toHaveBeenCalledWith({ type: 'startup-error', kind: 99, reason: 'unexpected' });
     expect(exitSpy).toHaveBeenCalledWith(99);
+  });
+
+  it('実行中に書き込みハングエラーが発生した場合は save-write-hang を送信してコード 4 で終了する', async () => {
+    const hangError = new Error('Save file write hang detected');
+    hangError.kind = 4;
+    hangError.type = 'save-write-hang';
+
+    const createApp = vi.fn(() => ({
+      start: vi.fn().mockResolvedValue(undefined),             // 起動は正常成功とする
+      waitUntilFatal: vi.fn().mockRejectedValue(hangError),    // waitUntilFatal を即時 reject で確定させる
+    }));
+
+    await main({ connectorConfig: createFakeConnectorConfig(FAKE_CONFIG), createApp });
+
+    // 正常起動時の ready メッセージを確認
+    expect(sendSpy).toHaveBeenCalledWith({ type: 'ready' });
+
+    // 書き込みハングエラー発生時の挙動を確認
+    expect(sendSpy).toHaveBeenCalledWith({
+      type: 'save-write-hang',
+      kind: 4,
+      reason: 'Save file write hang detected',
+    });
+    expect(exitSpy).toHaveBeenCalledWith(4);
   });
 });

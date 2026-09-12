@@ -14,6 +14,8 @@ async function main({
 
     // 実行開始（mainPort の listener が利用可能になるまで解決しない）
     const app = createApp(config);
+
+    // 起動時の同期的な処理による例外は素直にこの try ブロックの catch で補足可能
     await app.start();
 
     // IPC を使用してメインプロセスと疎通可能になったことを送信
@@ -21,13 +23,19 @@ async function main({
       process.send({ type: 'ready' });
     }
 
-    // 本番実行: ready 通知後も、実行中の致命的エラーまたは stop() までプロセスを維持する
-    //           (この wait がないと ready 送信後の例外をこの try catch で検知できない)
+    // 以降の socket.io イベントなどは app.start() 完了後の別コールスタックで発火
+    //  -> 当該コールバック内で例外送出してもこの try catch では捕捉不可
+    // この try ブロックの catch で補足するためのブリッジが waitUntilFatal()
+
     // 検証実行: 単体テスト用に無限待機メソッドを持たない簡易テストモックを許容するための条件分岐
     if (typeof app.waitUntilFatal === 'function') {
+      // 本番実行: ready 通知後も、実行中の致命的エラーまたは stop() までプロセスを維持する
       await app.waitUntilFatal();
     }
   } catch (error) {
+    // TODO: app.stop() をここで実行し、実行中の処理を終わらせる
+    // (ハング時に停止処理を実行できるかは要検討)
+
     // kind を持たないエラーは終了コード 99 にフォールバック
     const kind = error?.kind ?? 99;
 

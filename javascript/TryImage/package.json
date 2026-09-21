@@ -1,0 +1,12 @@
+{
+    "name": "try",
+    "version": "1.0.0",
+    "main": "main.js",
+    "scripts": {
+        "start": "node main.js",
+        "test": "node test/test.js"
+    },
+    "dependencies": {
+        "sharp": "^0.35.4"
+    }
+}

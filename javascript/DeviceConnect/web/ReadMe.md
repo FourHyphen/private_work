@@ -74,6 +74,7 @@ package.json からデバッグ実行する
 | `requestIntervalMs` | ミリ秒 | 外部デバイスデータを取得するポーリング間隔 |
 | `connector.deviceUrl` | URL | `connector` 経路のみ有効。ExternalDeviceConnector が接続する外部デバイス URL |
 | `connector.externalDeviceConnectorServerPort` | 例: `9002` | ExternalDeviceConnector がサーバーとして Listen するポート |
+| `connector.pollIntervalMs` | ミリ秒 | `connector` 経路のみ有効。ExternalDeviceConnector が外部デバイスをポーリングする間隔 |
 
 # メッセージ遷移
 ## ユーザー Web ブラウザ接続時と接続解除時
@@ -127,26 +128,42 @@ sequenceDiagram
 
 ### connector 経路（deviceSource=connector）
 
+- ExternalDeviceConnector は push+buffer モデルであり、外部デバイスへのポーリング（`pollIntervalMs`）とメインプロセスからの要求（`requestIntervalMs`）は独立して動作する
+- `main:request` はバッファの最新値を即時返すだけで、都度デバイスへ再要求はしない
+  - バッファが空（未受信）の場合は `main:nodata` が返る。
+
 ```mermaid
 sequenceDiagram
     participant Server as Node.js/Expressサーバー
     participant CS as ConnectorSource
-    participant Conn as ConnectorApp (subprocess)
+    participant Conn as ExternalDeviceConnector (subprocess)
     participant Device as 外部デバイス
     participant Browser as Webブラウザ
 
     Server->>CS: deviceSource.start(onSamples, onError)
     CS->>Conn: spawn node main.js
     CS->>Conn: Socket.IO 接続
-    loop requestIntervalMs ごと
-        CS->>Conn: MAIN_REQUEST
-        Conn->>Device: DEVICE_REQUEST
-        Device-->>Conn: DEVICE_DATA
-        Conn-->>CS: MAIN_DATA
-        CS->>CS: normalize(data)
-        CS->>Server: onSamples([normalizedSample])
-        Server->>Server: buffer に追加
+
+    par pollIntervalMs ごと（Connector 内部で独立実行）
+        loop
+            Conn->>Device: DEVICE_REQUEST
+            Device-->>Conn: DEVICE_DATA
+            Conn->>Conn: バッファ更新（最新1件）
+        end
+    and requestIntervalMs ごと
+        loop
+            CS->>Conn: MAIN_REQUEST
+            alt バッファにデータあり
+                Conn-->>CS: MAIN_DATA { data, updatedAt }
+                CS->>CS: normalize(data)
+                CS->>Server: onSamples([normalizedSample])
+                Server->>Server: buffer に追加
+            else バッファが空（未受信）
+                Conn-->>CS: MAIN_NO_DATA
+            end
+        end
     end
+
     Note over Server: buffer が 10件に達したら
     Server-->>Browser: status イベント送信 (10サンプル)
     Browser->>Browser: 受信データを画面表示

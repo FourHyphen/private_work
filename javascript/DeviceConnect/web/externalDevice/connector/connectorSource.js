@@ -38,6 +38,7 @@ class ConnectorSource {
     this._edcConnection.on('connect_error', onError);    // 接続失敗時に呼ばれるコールバック設定
 
     // 接続確立後、requestIntervalMs ごとに MAIN_REQUEST を送信する
+    // (これにより最新 1 件が返ってくる想定)
     this._edcConnection.on('connect', () => {
       this._requestTimer = setInterval(
         () => this._edcConnection.emit(MAIN_REQUEST),
@@ -45,7 +46,7 @@ class ConnectorSource {
       );
     });
 
-    // ExternalDeviceConnector はデータを蓄積しないので、受信したデータをそのまま 1 件転送する
+    // ExternalDeviceConnector から受信したデータをそのまま(1 件)転送する
     this._edcConnection.on(MAIN_DATA, (data) => {
       onSamples([normalize(data)]);
     });
@@ -59,14 +60,15 @@ class ConnectorSource {
   }
 }
 
-// ExternalDeviceConnector のデバイスデータ { seq, value, at } を共通形状へ変換（腐敗防止層）
-function normalize(raw) {
+// MAIN_DATA のペイロード { data: { seq, value }, updatedAt } を共通形状へ変換（腐敗防止層）
+function normalize({ data, updatedAt }) {
   return {
     online: true,
     deviceName: 'ExternalDeviceConnector',
-    data: { seq: raw.seq, value: raw.value },
-    timestamp: new Date(raw.at).toISOString(),
+    data: { seq: data.seq, value: data.value },
+    timestamp: updatedAt,
   };
 }
 
 module.exports = ConnectorSource;
+module.exports.normalize = normalize;    // 単体テスト用

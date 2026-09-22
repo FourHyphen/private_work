@@ -25,3 +25,14 @@ describe('ConnectorSource.buildNoDataStatus', () => {
     });
   });
 });
+
+describe('ConnectorSource.buildOversizedWarning', () => {
+  it('type: data-oversized の警告オブジェクトを組み立てる', () => {
+    const result = ConnectorSource.buildOversizedWarning();
+
+    expect(result).toEqual({
+      type: 'data-oversized',
+      message: '[connector] latest device data was oversized and discarded',
+    });
+  });
+});

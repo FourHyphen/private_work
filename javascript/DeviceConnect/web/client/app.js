@@ -29,3 +29,8 @@ socket.on('device-status', (status) => {
     statusEl.textContent = status.message;
   }
 });
+
+// device-data-oversized イベント受信時（直近データがサイズ超過で破棄された）
+socket.on('device-data-oversized', (warning) => {
+  statusEl.textContent = warning.message;
+});

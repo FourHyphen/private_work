@@ -68,10 +68,21 @@ server.listen(userWebClientListenPort, async () => {
     (status) => {
       io.emit('device-status', status);
     },
+    // onWarning = 処理は継続できる異常（例: データサイズ超過による破棄）
+    //  -> Web ブラウザへ転送
+    (warning) => {
+      io.emit('device-data-oversized', {
+        type: warning.type,
+        message: warning.message,
+      });
+    },
     // onError = ExternalDeviceConnector との接続失敗時の処理
     (err) => {
       console.error(err);
-      io.emit('device-error', err.message);
+      io.emit('device-error', {
+        type: err.type || 'connector-error',
+        message: err.message,
+      });
     }
   );
 

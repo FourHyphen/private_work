@@ -2,7 +2,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const { io: clientIo } = require('socket.io-client');
-const { MAIN_REQUEST, MAIN_DATA, MAIN_NO_DATA } = require('../../../ExternalDeviceConnector/events');
+const { MAIN_REQUEST, MAIN_DATA, MAIN_NO_DATA, MAIN_DATA_OVERSIZED } = require('../../../ExternalDeviceConnector/events');
 
 class ConnectorSource {
   // 接続はコンストラクタではなく start() 内で行う（未使用時に副作用を出さない）
@@ -13,10 +13,12 @@ class ConnectorSource {
     this._requestTimer = null;
   }
 
-  // onSamples = 外部デバイスデータ取得成功時に実行する処理
-  // onStatus = 異常ではない状態変化（例: データ未取得）を通知する処理
-  // onError = ExternalDeviceConnector との接続失敗時に実行する処理
-  async start(onSamples, onStatus = () => {}, onError = console.error) {
+  async start(
+    onSamples,                 // 外部デバイスデータ取得成功時に実行する処理
+    onStatus = () => {},       // 異常ではない状態変化（例: データ未取得）を通知する処理
+    onWarning = () => {},      // 処理は継続できる異常（例: データサイズ超過による破棄）を通知する処理
+    onError = console.error    // ExternalDeviceConnector との接続失敗時に実行する処理
+  ) {
     // ExternalDeviceConnector 実行準備
     const edcPath = path.join(__dirname, '../../../ExternalDeviceConnector/main.js');
     const connectorRuntimeConfig = {
@@ -59,6 +61,17 @@ class ConnectorSource {
       console.log('[connector] no data in buffer');
       onStatus(buildNoDataStatus());
     });
+
+    // 直近受信データがサイズ超過で破棄された状態
+    //  -> 以前に正常受信したデータがあれば onSamples へも転送しつつ、onWarning で警告する
+    this._edcConnection.on(MAIN_DATA_OVERSIZED, ({ data, updatedAt }) => {
+      console.log('[connector] latest device data was oversized and discarded');
+      if (data !== null) {
+        onSamples([normalize({ data, updatedAt })]);
+      }
+
+      onWarning(buildOversizedWarning());
+    });
   }
 
   async stop() {
@@ -87,6 +100,15 @@ function buildNoDataStatus() {
   };
 }
 
+// MAIN_DATA_OVERSIZED 受信時に onWarning へ渡す警告オブジェクトを組み立てる
+function buildOversizedWarning() {
+  return {
+    type: 'data-oversized',
+    message: '[connector] latest device data was oversized and discarded',
+  };
+}
+
 module.exports = ConnectorSource;
 module.exports.normalize = normalize;    // 単体テスト用
 module.exports.buildNoDataStatus = buildNoDataStatus;    // 単体テスト用
+module.exports.buildOversizedWarning = buildOversizedWarning;    // 単体テスト用

@@ -9,6 +9,7 @@
 
   "connector": {
     "deviceUrl": "http://localhost:9001",
-    "externalDeviceConnectorServerPort": 9002
+    "externalDeviceConnectorServerPort": 9002,
+    "pollIntervalMs": 3000
   }
 }

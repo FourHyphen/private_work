@@ -7,7 +7,7 @@ const { MAIN_REQUEST, MAIN_DATA } = require('../../../ExternalDeviceConnector/ev
 class ConnectorSource {
   // 接続はコンストラクタではなく start() 内で行う（未使用時に副作用を出さない）
   constructor(config) {
-    this._config = config;    // { deviceUrl, externalDeviceConnectorServerPort, requestIntervalMs }
+    this._config = config;    // { deviceUrl, externalDeviceConnectorServerPort, requestIntervalMs, pollIntervalMs, maxDeviceDataBytes?, saveFile? }
     this._child = null;
     this._edcConnection = null;    // ExternalDeviceConnector との接続管理(edc = ExternalDeviceConnector の頭文字)
     this._requestTimer = null;
@@ -21,6 +21,9 @@ class ConnectorSource {
     const connectorRuntimeConfig = {
       deviceUrl: this._config.deviceUrl,
       mainPort: this._config.externalDeviceConnectorServerPort,
+      pollIntervalMs: this._config.pollIntervalMs,
+      maxDeviceDataBytes: this._config.maxDeviceDataBytes,
+      saveFile: this._config.saveFile,
     };
 
     // ExternalDeviceConnector をサブプロセスとして起動

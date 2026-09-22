@@ -49,6 +49,31 @@ function validateSetting(s) {
 
     if (!isValidPort(s.connector.externalDeviceConnectorServerPort))
       throw new Error('[setting] connector.externalDeviceConnectorServerPort は 1〜65535 の整数でなければなりません');
+
+    if (!Number.isInteger(s.connector.pollIntervalMs) || s.connector.pollIntervalMs <= 0)
+      throw new Error('[setting] connector.pollIntervalMs は正の整数でなければなりません');
+
+    // maxDeviceDataBytes は省略可能
+    if (s.connector.maxDeviceDataBytes !== undefined) {
+      if (!Number.isInteger(s.connector.maxDeviceDataBytes) || s.connector.maxDeviceDataBytes <= 0)
+        throw new Error('[setting] connector.maxDeviceDataBytes は正の整数でなければなりません');
+    }
+
+    // saveFile は省略可能
+    if (s.connector.saveFile !== undefined) {
+      const saveFile = s.connector.saveFile;
+      if (typeof saveFile !== 'object' || saveFile === null)
+        throw new Error('[setting] connector.saveFile はオブジェクトでなければなりません');
+
+      if (typeof saveFile.dataFilePath !== 'string' || saveFile.dataFilePath === '')
+        throw new Error('[setting] connector.saveFile.dataFilePath は空でない文字列でなければなりません');
+
+      if (!Number.isInteger(saveFile.rotationKb) || saveFile.rotationKb <= 0)
+        throw new Error('[setting] connector.saveFile.rotationKb は正の整数でなければなりません');
+
+      if (!Number.isInteger(saveFile.maxSaveFileNum) || saveFile.maxSaveFileNum <= 0)
+        throw new Error('[setting] connector.saveFile.maxSaveFileNum は正の整数でなければなりません');
+    }
   }
 }
 

@@ -9,11 +9,15 @@ function createDeviceSource(setting) {
   switch (source) {
     // 想定: 外部デバイス接続に ExternalDeviceConnector 使用
     case 'connector':
-      return new ConnectorSource({
+      const config = {
         deviceUrl: setting.connector.deviceUrl,
         externalDeviceConnectorServerPort: setting.connector.externalDeviceConnectorServerPort,
         requestIntervalMs: setting.requestIntervalMs,
-      });
+        pollIntervalMs: setting.connector.pollIntervalMs,
+        maxDeviceDataBytes: setting.connector.maxDeviceDataBytes,
+        saveFile: setting.connector.saveFile,
+      }
+      return new ConnectorSource(config);
     // 想定: このアプリから直接外部デバイスに接続
     case 'driver':
       return new DriverSourceWrapper(DriverSourceFactory(setting), { intervalMs: setting.requestIntervalMs });

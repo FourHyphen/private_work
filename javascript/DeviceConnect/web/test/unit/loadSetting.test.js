@@ -16,7 +16,7 @@ describe('loadSetting', () => {
         requestIntervalMs: 200,
         externalDeviceMode: 'real',
         externalDeviceUrl: 'http://10.0.0.1:9600',
-        connector: { deviceUrl: 'http://10.0.0.1:9001', externalDeviceConnectorServerPort: 9003 },
+        connector: { deviceUrl: 'http://10.0.0.1:9001', externalDeviceConnectorServerPort: 9003, pollIntervalMs: 3000 },
       };
       tmpFile = path.join(os.tmpdir(), `setting-test-${Date.now()}.json`);
       fs.writeFileSync(tmpFile, JSON.stringify(customSetting), 'utf-8');
@@ -63,6 +63,7 @@ describe('validateSetting — 必須パラメーター検証', () => {
     connector: {
       deviceUrl: 'http://localhost:9001',
       externalDeviceConnectorServerPort: 9002,
+      pollIntervalMs: 3000,
     },
   };
 
@@ -140,6 +141,68 @@ describe('validateSetting — 必須パラメーター検証', () => {
         '不正値 %s の場合は Error を送出する',
         (val) => {
           expect(() => validateSetting({ ...VALID, deviceSource: 'connector', connector: { ...VALID.connector, externalDeviceConnectorServerPort: val } })).toThrow(Error);
+        }
+      );
+    });
+
+    describe('connector.pollIntervalMs', () => {
+      it('正の整数の場合はエラーを送出しない', () => {
+        expect(() => validateSetting({ ...VALID, deviceSource: 'connector' })).not.toThrow();
+      });
+
+      it.each([undefined, null, 0, -1, '3000'])(
+        '不正値 %s の場合は Error を送出する',
+        (val) => {
+          expect(() => validateSetting({ ...VALID, deviceSource: 'connector', connector: { ...VALID.connector, pollIntervalMs: val } })).toThrow(Error);
+        }
+      );
+    });
+
+    describe('connector.maxDeviceDataBytes', () => {
+      it('未定義の場合はエラーを送出しない', () => {
+        expect(() => validateSetting({ ...VALID, deviceSource: 'connector' })).not.toThrow();
+      });
+
+      it.each([0, -1, 3.5, '1024'])(
+        '不正値 %s の場合は Error を送出する',
+        (val) => {
+          expect(() => validateSetting({ ...VALID, deviceSource: 'connector', connector: { ...VALID.connector, maxDeviceDataBytes: val } })).toThrow(Error);
+        }
+      );
+    });
+
+    describe('connector.saveFile', () => {
+      const VALID_SAVE_FILE = { dataFilePath: './data.jsonl', rotationKb: 1024, maxSaveFileNum: 5 };
+
+      it('未定義の場合はエラーを送出しない', () => {
+        expect(() => validateSetting({ ...VALID, deviceSource: 'connector' })).not.toThrow();
+      });
+
+      it('有効な saveFile の場合はエラーを送出しない', () => {
+        expect(() => validateSetting({ ...VALID, deviceSource: 'connector', connector: { ...VALID.connector, saveFile: VALID_SAVE_FILE } })).not.toThrow();
+      });
+
+      it.each([undefined, null, '', 123])(
+        'dataFilePath が不正値 %s の場合は Error を送出する',
+        (val) => {
+          const saveFile = { ...VALID_SAVE_FILE, dataFilePath: val };
+          expect(() => validateSetting({ ...VALID, deviceSource: 'connector', connector: { ...VALID.connector, saveFile } })).toThrow(Error);
+        }
+      );
+
+      it.each([undefined, null, 0, -1, '1024'])(
+        'rotationKb が不正値 %s の場合は Error を送出する',
+        (val) => {
+          const saveFile = { ...VALID_SAVE_FILE, rotationKb: val };
+          expect(() => validateSetting({ ...VALID, deviceSource: 'connector', connector: { ...VALID.connector, saveFile } })).toThrow(Error);
+        }
+      );
+
+      it.each([undefined, null, 0, -1, '5'])(
+        'maxSaveFileNum が不正値 %s の場合は Error を送出する',
+        (val) => {
+          const saveFile = { ...VALID_SAVE_FILE, maxSaveFileNum: val };
+          expect(() => validateSetting({ ...VALID, deviceSource: 'connector', connector: { ...VALID.connector, saveFile } })).toThrow(Error);
         }
       );
     });

@@ -76,7 +76,7 @@ server.listen(userWebClientListenPort, async () => {
         message: warning.message,
       });
     },
-    // onError = ExternalDeviceConnector との接続失敗時の処理
+    // onError = ExternalDeviceConnector との初回接続失敗、接続断時の処理
     (err) => {
       console.error(err);
       io.emit('device-error', {

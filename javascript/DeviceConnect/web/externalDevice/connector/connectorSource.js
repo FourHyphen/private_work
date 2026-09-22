@@ -2,7 +2,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const { io: clientIo } = require('socket.io-client');
-const { MAIN_REQUEST, MAIN_DATA } = require('../../../ExternalDeviceConnector/events');
+const { MAIN_REQUEST, MAIN_DATA, MAIN_NO_DATA } = require('../../../ExternalDeviceConnector/events');
 
 class ConnectorSource {
   // 接続はコンストラクタではなく start() 内で行う（未使用時に副作用を出さない）
@@ -14,8 +14,9 @@ class ConnectorSource {
   }
 
   // onSamples = 外部デバイスデータ取得成功時に実行する処理
+  // onStatus = 異常ではない状態変化（例: データ未取得）を通知する処理
   // onError = ExternalDeviceConnector との接続失敗時に実行する処理
-  async start(onSamples, onError = console.error) {
+  async start(onSamples, onStatus = () => {}, onError = console.error) {
     // ExternalDeviceConnector 実行準備
     const edcPath = path.join(__dirname, '../../../ExternalDeviceConnector/main.js');
     const connectorRuntimeConfig = {
@@ -46,9 +47,17 @@ class ConnectorSource {
       );
     });
 
-    // ExternalDeviceConnector から受信したデータをそのまま(1 件)転送する
+    // ExternalDeviceConnector から受信したデータ(1 件)
+    //  -> onSamples イベントに転送
     this._edcConnection.on(MAIN_DATA, (data) => {
       onSamples([normalize(data)]);
+    });
+
+    // Connector とは通信できているが、外部デバイスからまだデータを取得できていない状態
+    //  -> onStatus イベントに転送
+    this._edcConnection.on(MAIN_NO_DATA, () => {
+      console.log('[connector] no data in buffer');
+      onStatus(buildNoDataStatus());
     });
   }
 
@@ -70,5 +79,14 @@ function normalize({ data, updatedAt }) {
   };
 }
 
+// MAIN_NO_DATA 受信時に onStatus へ渡す状態オブジェクトを組み立てる
+function buildNoDataStatus() {
+  return {
+    type: 'no-data',
+    message: 'Connector is connected, but no data has been received from the external device',
+  };
+}
+
 module.exports = ConnectorSource;
 module.exports.normalize = normalize;    // 単体テスト用
+module.exports.buildNoDataStatus = buildNoDataStatus;    // 単体テスト用

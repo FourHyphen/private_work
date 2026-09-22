@@ -21,3 +21,11 @@ socket.on('disconnect', () => {
 socket.on('status', (payload) => {
   statusEl.textContent = JSON.stringify(payload.samples, null, 2);
 });
+
+// device-status イベント受信時
+socket.on('device-status', (status) => {
+  // Connector とは通信できているが外部デバイスのデータ未取得の場合
+  if (status.type === 'no-data') {
+    statusEl.textContent = status.message;
+  }
+});

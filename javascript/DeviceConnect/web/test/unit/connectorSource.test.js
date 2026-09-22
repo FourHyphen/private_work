@@ -14,3 +14,14 @@ describe('ConnectorSource.normalize', () => {
     });
   });
 });
+
+describe('ConnectorSource.buildNoDataStatus', () => {
+  it('type: no-data の状態オブジェクトを組み立てる', () => {
+    const result = ConnectorSource.buildNoDataStatus();
+
+    expect(result).toEqual({
+      type: 'no-data',
+      message: 'Connector is connected, but no data has been received from the external device',
+    });
+  });
+});

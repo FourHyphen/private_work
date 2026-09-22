@@ -63,6 +63,12 @@ server.listen(userWebClientListenPort, async () => {
         io.emit('status', ExternalDeviceDataPayload.createStatusForLiveUpdate(externalDeviceDataBuffer, clients));
       }
     },
+    // onStatus = 異常ではない状態変化（例: データ未取得）
+    //  -> Web ブラウザへ転送
+    (status) => {
+      io.emit('device-status', status);
+    },
+    // onError = ExternalDeviceConnector との接続失敗時の処理
     (err) => {
       console.error(err);
       io.emit('device-error', err.message);

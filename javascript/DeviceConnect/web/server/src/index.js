@@ -79,6 +79,7 @@ server.listen(userWebClientListenPort, async () => {
       },
       // onError = ExternalDeviceConnector との初回接続失敗、接続断時の処理
       (err) => {
+        // TODO: app 側の device-error 受け取り処理実装
         console.error(err);
         io.emit('device-error', {
           type: err.type || 'connector-error',

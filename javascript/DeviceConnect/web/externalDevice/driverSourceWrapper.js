@@ -6,13 +6,22 @@ class DriverSourceWrapper {
     this._timer = null;
   }
 
-  async start(onSamples, onError = console.error) {
+  async start(
+    onSamples,
+    onStatus = () => {},       // driver 経路では現状発火しない（Connector 経路と口を揃えるためだけの受け口）
+    onWarning = () => {},      // driver 経路では現状発火しない（Connector 経路と口を揃えるためだけの受け口）
+    onError = console.error
+  ) {
     await this._driver.connect();
+
     this._timer = setInterval(async () => {
       try {
         const sample = await this._driver.readStatus();
         onSamples([sample]);    // 1 件でも配列で渡し、バッチ経路と口を揃える
       } catch (err) {
+        if (!err.type) {
+          err.type = 'driver-error';    // server 側の err.type フォールバックが 'connector-error' に丸めないようにする
+        }
         onError(err);
       }
     }, this._intervalMs);

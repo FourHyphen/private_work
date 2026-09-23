@@ -13,6 +13,8 @@ class ConnectorSource {
     this._requestTimer = null;
   }
 
+  // resolve -> ExternalDeviceConnector から ready を受信したとき
+  // reject -> ExternalDeviceConnector との接続確立に失敗したとき
   async start(
     onSamples,                 // 外部デバイスデータ取得成功時に実行する処理
     onStatus = () => {},       // 異常ではない状態変化（例: データ未取得）を通知する処理
@@ -29,11 +31,40 @@ class ConnectorSource {
       saveFile: this._config.saveFile,
     };
 
-    // ExternalDeviceConnector をサブプロセスとして起動
-    this._child = spawn('node', [edcPath, JSON.stringify(connectorRuntimeConfig)], { stdio: 'inherit' });
+    // ExternalDeviceConnector をサブプロセスとして起動（IPC で ready/startup-error を受信するため 'ipc' を有効化）
+    this._child = spawn('node', [edcPath, JSON.stringify(connectorRuntimeConfig)], {
+      stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+    });
 
-    // サブプロセス終了を検知する
-    this._child.on('exit', (code) => onError(new Error(`connector exited: ${code}`)));
+    let readyReceived = false;
+
+    // ready/startup-error を待つハンドシェイク（start() の Promise 解決/拒否はこれに従う）
+    // (ready = ExternalDeviceConnector で 本プロセスと疎通可能になった通知)
+    const handshake = new Promise((resolve, reject) => {
+      this._child.on('message', (msg) => {
+        const result = determineConnectorAvailability(msg);
+        if (result.ok === true) {
+          readyReceived = true;
+          resolve();
+        } else if (result.ok === false) {
+          reject(new Error(result.reason));
+        }
+      });
+
+      // ready/startup-error を受信する前にサブプロセスが終了した場合は reject
+      this._child.once('exit', (code) => {
+        if (!readyReceived) {
+          reject(buildExitBeforeReadyError(code));
+        }
+      });
+    });
+
+    // ready 受信後のサブプロセス異常終了を検知する
+    this._child.on('exit', (code) => {
+      if (readyReceived) {
+        onError(new Error(`connector exited: ${code}`));
+      }
+    });
 
     // ExternalDeviceConnector との接続確立
     // (ExternalDeviceConnector はローカルホスト実行前提なので localhost 決め打ち)
@@ -72,6 +103,9 @@ class ConnectorSource {
 
       onWarning(buildOversizedWarning());
     });
+
+    // ExternalDeviceConnector との接続成否が確定するまで待つ
+    await handshake;
   }
 
   async stop() {
@@ -108,7 +142,28 @@ function buildOversizedWarning() {
   };
 }
 
+// IPC で受信したメッセージが ready/startup-error のどちらかを判定する
+// (ready: 成功, startup-error: 失敗, それ以外: 未確定)
+function determineConnectorAvailability(msg) {
+  if (msg?.type === 'ready') {
+    return { ok: true };
+  }
+
+  if (msg?.type === 'startup-error') {
+    return { ok: false, reason: msg.reason };
+  }
+
+  return { ok: null };
+}
+
+// ready 受信前にサブプロセスが終了した場合のエラーを組み立てる（kind は不明なので含めない）
+function buildExitBeforeReadyError(code) {
+  return new Error(`connector exited before ready: ${code}`);
+}
+
 module.exports = ConnectorSource;
 module.exports.normalize = normalize;    // 単体テスト用
 module.exports.buildNoDataStatus = buildNoDataStatus;    // 単体テスト用
 module.exports.buildOversizedWarning = buildOversizedWarning;    // 単体テスト用
+module.exports.determineConnectorAvailability = determineConnectorAvailability;    // 単体テスト用
+module.exports.buildExitBeforeReadyError = buildExitBeforeReadyError;    // 単体テスト用

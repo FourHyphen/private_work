@@ -36,3 +36,38 @@ describe('ConnectorSource.buildOversizedWarning', () => {
     });
   });
 });
+
+describe('ConnectorSource.determineConnectorAvailability', () => {
+  it('ready メッセージを成功と判定する', () => {
+    const result = ConnectorSource.determineConnectorAvailability({ type: 'ready' });
+
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('startup-error メッセージを失敗と判定し、reason を含める', () => {
+    const result = ConnectorSource.determineConnectorAvailability({ type: 'startup-error', reason: 'boom' });
+
+    expect(result).toEqual({ ok: false, reason: 'boom' });
+  });
+
+  it('ready/startup-error 以外のメッセージは未確定として扱う', () => {
+    const result = ConnectorSource.determineConnectorAvailability({ type: 'other' });
+
+    expect(result).toEqual({ ok: null });
+  });
+});
+
+describe('ConnectorSource.buildExitBeforeReadyError', () => {
+  it('終了コードを含むエラーを組み立てる', () => {
+    const result = ConnectorSource.buildExitBeforeReadyError(1);
+
+    expect(result).toBeInstanceOf(Error);
+    expect(result.message).toBe('connector exited before ready: 1');
+  });
+
+  it('終了コードが null でもエラーメッセージを組み立てる', () => {
+    const result = ConnectorSource.buildExitBeforeReadyError(null);
+
+    expect(result.message).toBe('connector exited before ready: null');
+  });
+});

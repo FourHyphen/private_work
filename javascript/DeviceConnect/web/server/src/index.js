@@ -51,40 +51,48 @@ io.on('connection', (socket) => {
 // requestIntervalMs ごとに外部デバイスデータ取得、一定程度たまったらユーザー Web ブラウザに送信
 // サーバーとしてクライアント Web ブラウザを待ち受け開始
 server.listen(userWebClientListenPort, async () => {
-  // 外部デバイスからのデータ取得経路を開始
-  await deviceSource.start(
-    // onSamples = 外部デバイスデータ取得成功時に実行する処理
-    (samples) => {
-      // 外部デバイスデータをバッファに追加
-      for (const s of samples) externalDeviceDataBuffer.push(s);
+  try {
+    // 外部デバイスからのデータ取得経路を開始
+    await deviceSource.start(
+      // onSamples = 外部デバイスデータ取得成功時に実行する処理
+      (samples) => {
+        // 外部デバイスデータをバッファに追加
+        for (const s of samples) externalDeviceDataBuffer.push(s);
 
-      // 送る条件を満たしていれば ユーザー Web ブラウザに送信
-      while (externalDeviceDataBuffer.isReady) {
-        io.emit('status', ExternalDeviceDataPayload.createStatusForLiveUpdate(externalDeviceDataBuffer, clients));
+        // 送る条件を満たしていれば ユーザー Web ブラウザに送信
+        while (externalDeviceDataBuffer.isReady) {
+          io.emit('status', ExternalDeviceDataPayload.createStatusForLiveUpdate(externalDeviceDataBuffer, clients));
+        }
+      },
+      // onStatus = 異常ではない状態変化（例: データ未取得）
+      //  -> Web ブラウザへ転送
+      (status) => {
+        io.emit('device-status', status);
+      },
+      // onWarning = 処理は継続できる異常（例: データサイズ超過による破棄）
+      //  -> Web ブラウザへ転送
+      (warning) => {
+        io.emit('device-data-oversized', {
+          type: warning.type,
+          message: warning.message,
+        });
+      },
+      // onError = ExternalDeviceConnector との初回接続失敗、接続断時の処理
+      (err) => {
+        console.error(err);
+        io.emit('device-error', {
+          type: err.type || 'connector-error',
+          message: err.message,
+        });
       }
-    },
-    // onStatus = 異常ではない状態変化（例: データ未取得）
-    //  -> Web ブラウザへ転送
-    (status) => {
-      io.emit('device-status', status);
-    },
-    // onWarning = 処理は継続できる異常（例: データサイズ超過による破棄）
-    //  -> Web ブラウザへ転送
-    (warning) => {
-      io.emit('device-data-oversized', {
-        type: warning.type,
-        message: warning.message,
-      });
-    },
-    // onError = ExternalDeviceConnector との初回接続失敗、接続断時の処理
-    (err) => {
-      console.error(err);
-      io.emit('device-error', {
-        type: err.type || 'connector-error',
-        message: err.message,
-      });
-    }
-  );
+    );
+  } catch (err) {
+    // 起動失敗（ready 未受信による reject）を握りつぶさず、サーバーごと終了する
+    console.error('Failed to start device source:', err);
+    server.close();
+    process.exit(1);
+    return;
+  }
 
   console.log(`Server listening on http://localhost:${userWebClientListenPort}`);
 });
